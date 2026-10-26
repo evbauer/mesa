@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wdm_av_builder"
+version = "0.1.0"
+description = "Python table builder for the MESA WDM_AV (warm dense matter, additive-volume) EOS"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.24",
+    "h5py>=3.0",
+    "matplotlib>=3.5",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+wdm-av-builder = "wdm_av_builder.cli:main"
+
+[tool.setuptools]
+packages = ["wdm_av_builder"]
+
+# Ruff configuration is inherited from the repository root (../../.ruff.toml);
+# no [tool.ruff] here so the two never diverge.

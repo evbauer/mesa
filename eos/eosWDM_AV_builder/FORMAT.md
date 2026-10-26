@@ -102,10 +102,12 @@ f_tau = -T s = f - e          (from S if present, else from F - E)
 and, when second derivatives are supplied by the source,
 
 ```
-f_xixi   = rho (dP/drho)_T - P/rho = rho P_rho - f_xi
+f_xixi   = (dP/drho)_T - P/rho = P_rho - f_xi
 f_xitau  = T (dP/dT)_rho / rho
 f_tautau = f_tau - T c_V
 ```
+
+(Derivation: f_xixi = d(P/rho)/dxi = rho d(P/rho)/drho = P_rho - P/rho.)
 
 Otherwise these three and the three higher cross terms come from finite differences
 described in `fd_scheme`.
