@@ -48,6 +48,12 @@ e.g. `eosWDM_AV_ne22.h5`. Read in Fortran through `forum` (`hdf5io_t`).
 
 ### Root attributes
 
+Note on types: MESA reads this file through `forum`, which cannot read h5py string
+attributes (fixed- or variable-length) and has no int8 reader. Therefore: **string
+attributes are provenance only and are never read by MESA**; the isotope identity
+comes from the file name. Integer attributes are written as int32, reals as float64;
+the `valid` dataset is int8 on disk and is read into a default integer by MESA.
+
 | name | type | meaning |
 |---|---|---|
 | `format_version` | int | 1 |
