@@ -155,13 +155,16 @@
       integer, parameter :: i_eos_ideal = 7
       integer, parameter :: i_frac_ideal = i_frac_CMS+1
             ! fraction ideal ion+radiation
+      integer, parameter :: i_eos_WDM_AV = 8
+      integer, parameter :: i_frac_WDM_AV = i_frac_ideal+1
+            ! fraction WDM_AV (warm dense matter, additive volume)
 
       ! eos frac entries correspond to the slice
       ! i_frac:i_frac+num_eos_frac_results-1
       integer, parameter :: i_frac = i_frac_HELM  ! first frac entry
-      integer, parameter :: num_eos_frac_results = 7
+      integer, parameter :: num_eos_frac_results = 8
 
-      integer, parameter :: num_eos_basic_results = i_frac_ideal
+      integer, parameter :: num_eos_basic_results = i_frac_WDM_AV
       integer, parameter :: nv = num_eos_basic_results
 
       ! only return d_dxa of lnE and lnPgas to star
@@ -297,6 +300,21 @@
          logical :: use_simple_Skye_blends
          real(dp) :: logRho_min_for_any_Skye, logRho_min_for_all_Skye
          real(dp) :: logT_min_for_any_Skye, logT_min_for_all_Skye
+
+         ! limits/options for WDM_AV (warm dense matter, additive volume)
+         logical :: use_WDM_AV
+         character(len=strlen) :: WDM_AV_table_dir  ! '' => mesa_data_dir/eosWDM_AV_data
+         character(len=strlen) :: WDM_AV_table_set  ! table-set subdirectory (e.g. 'skye', 'ideal')
+         character(len=strlen) :: WDM_AV_mixing_entropy  ! 'none' | 'ions' | 'ions_electrons'
+         logical :: WDM_AV_rescale_missing_isotopes
+         real(dp) :: mass_fraction_limit_for_WDM_AV
+         real(dp) :: logRho_min_for_any_WDM_AV, logRho_min_for_all_WDM_AV
+         real(dp) :: logRho_max_for_all_WDM_AV, logRho_max_for_any_WDM_AV
+         real(dp) :: logT_min_for_any_WDM_AV, logT_min_for_all_WDM_AV
+         real(dp) :: logT_max_for_all_WDM_AV, logT_max_for_any_WDM_AV
+         real(dp) :: WDM_AV_newton_tol
+         integer :: WDM_AV_max_iter
+         logical :: WDM_AV_debug
 
          ! misc
          logical :: include_radiation, include_elec_pos
@@ -496,6 +514,7 @@
          eosDT_result_names(i_frac_FreeEOS) = 'FreeEOS'
          eosDT_result_names(i_frac_CMS) = 'CMS'
          eosDT_result_names(i_frac_ideal) = 'ideal'
+         eosDT_result_names(i_frac_WDM_AV) = 'WDM_AV'
 
       end subroutine eos_def_init
 
@@ -566,9 +585,13 @@
 
 
       subroutine eos_def_shutdown
+         use eos_wdm_av_load, only: eos_wdm_av_free_tables
          type (eosPC_Support_Info), pointer :: fq
          type (FITION_Info), pointer :: fi
          integer :: iz
+
+         ! WDM_AV per-isotope table store
+         call eos_wdm_av_free_tables
 
          ! DT tables
          call free_EosDT_XZ_Info( &

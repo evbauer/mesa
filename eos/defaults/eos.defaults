@@ -228,6 +228,105 @@
       logT_min_for_all_Skye = 7.4
 
 
+! WDM_AV controls
+! ---------------
+
+   ! The WDM_AV ("warm dense matter, additive volume") component is a per-isotope
+   ! tabulated EOS combined at call time for an arbitrary mixture by an
+   ! additive-volume solve. It sits between the CMS and Skye levels of the eosDT
+   ! cascade. Its intended target is the low-temperature "hole" in MESA's
+   ! coverage between FreeEOS and Skye (Decision D20). It is disabled by default,
+   ! so existing behaviour is unchanged unless ``use_WDM_AV = .true.``.
+   !
+   ! The blend-box limits below are PROVISIONAL and will be tuned. Regardless of
+   ! the box, the component declines (skips, so the cascade falls through) any
+   ! point its per-isotope tables do not cover.
+
+   ! ``use_WDM_AV``
+   ! ~~~~~~~~~~~~~~
+   ! Select whether to use the WDM_AV EOS.
+   ! ::
+
+      use_WDM_AV = .false.
+
+
+   ! ``WDM_AV_table_dir``
+   ! ~~~~~~~~~~~~~~~~~~~~
+   ! Directory holding the processed per-isotope HDF5 tables.
+   ! Empty string means ``mesa_data_dir/eosWDM_AV_data``.
+   ! ::
+
+      WDM_AV_table_dir = ''
+
+
+   ! ``WDM_AV_table_set``
+   ! ~~~~~~~~~~~~~~~~~~~~
+   ! Table-set subdirectory under ``WDM_AV_table_dir`` selecting which set of
+   ! tables to use (e.g. ``'ideal'`` or ``'skye'`` -> ``.../eosWDM_AV_data/<set>/``).
+   ! Empty string means use ``WDM_AV_table_dir`` itself.
+   ! ::
+
+      WDM_AV_table_set = ''
+
+
+   ! ``WDM_AV_mixing_entropy``
+   ! ~~~~~~~~~~~~~~~~~~~~~~~~~
+   ! Ideal mixing-entropy model, evaluated with the actual AV partial volumes.
+   ! One of ``'none'``, ``'ions'``, or ``'ions_electrons'``.
+   ! ::
+
+      WDM_AV_mixing_entropy = 'ions_electrons'
+
+
+   ! ``WDM_AV_rescale_missing_isotopes``
+   ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   ! If an exact per-isotope table is not found, use the nearest-A same-Z table
+   ! with the exact density rescaling (Decision D6).
+   ! ::
+
+      WDM_AV_rescale_missing_isotopes = .true.
+
+
+   ! ``mass_fraction_limit_for_WDM_AV``
+   ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   ! Species with mass fraction below this are dropped and X renormalised over
+   ! the covered species. If the uncovered mass fraction of species the tables
+   ! cannot supply exceeds this limit, the component declines the point.
+   ! ::
+
+      mass_fraction_limit_for_WDM_AV = 1d-4
+
+
+   ! WDM_AV Blending
+   ! ~~~~~~~~~~~~~~~
+   ! Simple Rho/T ramp blends in the style of the simple Skye blends. Outside the
+   ! "any" limits the component is not used (alfa = 1, fall through); inside the
+   ! "all" limits it is fully used; it ramps linearly between. These defaults aim
+   ! at the low-T hole between FreeEOS and Skye (Decision D20) and are provisional.
+   ! ::
+
+      logRho_min_for_any_WDM_AV = -3.0
+      logRho_min_for_all_WDM_AV = -2.5
+      logRho_max_for_all_WDM_AV = 4.5
+      logRho_max_for_any_WDM_AV = 5.0
+      logT_min_for_any_WDM_AV = 2.9
+      logT_min_for_all_WDM_AV = 3.0
+      logT_max_for_all_WDM_AV = 7.0
+      logT_max_for_any_WDM_AV = 7.5
+
+
+   ! WDM_AV Solver controls
+   ! ~~~~~~~~~~~~~~~~~~~~~~
+   ! Tolerance and iteration cap for the additive-volume Newton solve, and a
+   ! debug flag (when true, solver failures return ierr instead of skipping, and
+   ! a Gibbs-space cross-check is printed).
+   ! ::
+
+      WDM_AV_newton_tol = 1d-12
+      WDM_AV_max_iter = 50
+      WDM_AV_debug = .false.
+
+
 ! CMS controls
 ! ------------
 

@@ -353,6 +353,9 @@ program eos_plotter
          else if ( i_var == 0) then
 
             ! show blend regions
+            ! region code = i_max - i_frac + 1, i.e. HELM=1, OPAL/SCVH=2,
+            ! FreeEOS=3, PC=4, Skye=5, CMS=6, ideal=7, WDM_AV=8 (see regions.py).
+            ! The loop runs over the full frac slice, so WDM_AV is picked up here.
             res1 = 0d0
             i_max = -1
             do i = i_frac, i_frac+num_eos_frac_results-1

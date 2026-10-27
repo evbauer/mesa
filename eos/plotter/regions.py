@@ -49,25 +49,36 @@ ax.set_xlim(Xran.min(), Xran.max())
 ax.set_ylim(Yran.min(), Yran.max())
 
 # set up color map (slightly customized to make Skye blue)
+# region codes from the Fortran plotter: HELM=1, OPAL/SCVH=2, FreeEOS=3, PC=4,
+# Skye=5, CMS=6, ideal=7, WDM_AV=8.  The bins below lump PC+Skye and CMS+ideal,
+# and give WDM_AV (the warm dense matter / additive volume component) its own bin.
+accent = np.array(mpl.cm.get_cmap("Accent").colors)  # 8 colors, entries editable
 my_colors = np.array(
-    mpl.cm.get_cmap("Accent").colors
-)  # array so that entries are editable
-tmp = my_colors[4].copy()
-my_colors[4] = my_colors[3]
-my_colors[5] = tmp
+    [
+        accent[7],  # blend (code 0)
+        accent[0],  # HELM (1)
+        accent[1],  # OPAL/SCVH (2)
+        accent[2],  # FreeEOS (3)
+        accent[4],  # Skye (PC+Skye, 4-5)
+        accent[5],  # ideal (CMS+ideal, 6-7)
+        accent[6],  # WDM_AV (8)
+    ]
+)
 cmap = colors.ListedColormap(my_colors)
-bounds = [-0.5, 0.5, 1.5, 2.5, 3.5, 5.5, 7.5]
+bounds = [-0.5, 0.5, 1.5, 2.5, 3.5, 5.5, 7.5, 8.5]
 norm = colors.BoundaryNorm(bounds, cmap.N)
 cmap.set_under("white")
 
 pcol = ax.pcolormesh(
     Xran, Yran, eosDT[..., 2], shading="nearest", cmap=cmap, norm=norm, rasterized=True
 )
-cax = fig.colorbar(pcol, ticks=[0, 1, 2, 3, 4.5, 6.5])
+cax = fig.colorbar(pcol, ticks=[0, 1, 2, 3, 4.5, 6.5, 8])
 cax.set_label("")
 cax.ax.tick_params(labelsize="x-small")
 cax.ax.minorticks_off()
-cax.ax.set_yticklabels(["blend", "HELM", "OPAL/SCVH", "FreeEOS", "Skye", "ideal"])
+cax.ax.set_yticklabels(
+    ["blend", "HELM", "OPAL/SCVH", "FreeEOS", "Skye", "ideal", "WDM_AV"]
+)
 
 # save figure
 # fig.savefig('eos_regions.pdf')

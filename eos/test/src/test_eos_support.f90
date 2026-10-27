@@ -441,6 +441,10 @@ contains
       real(dp), dimension(num_eos_basic_results) :: &
          res, d_dlnd, d_dlnT
       integer:: ierr
+      type (EoS_General_Info), pointer :: rq
+      logical :: wdm_av_present
+      real(dp) :: logT_av, logRho_av
+      character(len=512) :: wdm_av_file
       include 'formats'
 
       write (*, *) 'test_components'
@@ -481,6 +485,53 @@ contains
       call test1(1, 'opal_scvh')
       call test1(2, 'helm')
       call test1(4, 'pc')
+      write (*, '(A)')
+
+      ! WDM_AV component: C/O 50/50 mixture at logRho=6, logT=7.5 using table set 'skye'.
+      ! These optional per-isotope tables may be absent on some machines, so the block
+      ! is guarded: if the c12 table of the 'skye' set is not present we print a fixed
+      ! line instead.  The committed golden corresponds to the tables being PRESENT on
+      ! the development machine (data/eosWDM_AV_data/skye/eosWDM_AV_{c12,o16}.h5).
+      write (*, '(A)')
+      write (*, '(a)') ' WDM_AV component (C/O 50/50, table set skye)'
+      wdm_av_file = trim(mesa_data_dir)//'/eosWDM_AV_data/skye/eosWDM_AV_c12.h5'
+      inquire (file=trim(wdm_av_file), exist=wdm_av_present)
+      if (.not. wdm_av_present) then
+         write (*, '(a)') ' WDM_AV tables not available'
+      else
+         logRho_av = 6.0d0
+         logT_av = 7.5d0
+         ! C/O 50/50; chem_id/net_iso were set up by the Init_Composition call above
+         xa(:) = 0d0
+         xa(c12) = 0.5d0
+         xa(o16) = 0.5d0
+         call eos_ptr(handle, rq, ierr)
+         if (ierr /= 0) then
+            write (*, '(a)') ' WDM_AV failed to get eos pointer'
+         else
+            rq% use_WDM_AV = .true.
+            rq% WDM_AV_table_set = 'skye'
+            call eosDT_get_component( &
+               handle, i_eos_WDM_AV, &
+               species, chem_id, net_iso, xa, &
+               exp10(logRho_av), logRho_av, exp10(logT_av), logT_av, &
+               res, d_dlnd, d_dlnT, d_dxa, ierr)
+            if (ierr /= 0) then
+               write (*, '(a)') ' WDM_AV no results'
+            else
+               write (*, 1) 'logRho', logRho_av
+               write (*, 1) 'logT', logT_av
+               write (*, 1) 'P', exp(res(i_lnPgas))
+               write (*, 1) 'E', exp(res(i_lnE))
+               write (*, 1) 'S', exp(res(i_lnS))
+               write (*, 1) 'grad_ad', res(i_grad_ad)
+               write (*, 1) 'chiRho', res(i_chiRho)
+               write (*, 1) 'chiT', res(i_chiT)
+               write (*, 1) 'gamma1', res(i_gamma1)
+               write (*, 1) 'frac_WDM_AV', res(i_frac_WDM_AV)
+            end if
+         end if
+      end if
       write (*, '(A)')
 
    contains
