@@ -175,6 +175,7 @@ def build_nodal_data(
     zero_twist: bool = False,
     e_offset: float = 0.0,
     f_offset: float = 0.0,
+    ignore_source_derivs: bool = False,
 ) -> NodalData:
     """Build the 9 nodal fields (and optional Zbar/eta) from a source table.
 
@@ -189,6 +190,10 @@ def build_nodal_data(
         (f_xixitau, f_xitautau, f_xixitautau) to zero (experiment), recorded in
         ``fd_scheme``.
     e_offset, f_offset : constants added to the (post-radiation-strip) E and F.
+    ignore_source_derivs : when True, never use the supplied ``dPdRho_T``,
+        ``dPdT_Rho``, ``Cv`` columns for the second derivatives; take the
+        finite-difference path instead (so ``second_derivs_from_source = 0``).
+        Used to compare the source-derivative and pure-FD builds.
     """
     if order not in (3, 5):
         raise ValueError("order must be 3 or 5")
@@ -242,7 +247,9 @@ def build_nodal_data(
     e = f - f_tau if E is None else E
 
     # --- second derivatives ---
-    have_src2 = all(c in source.columns for c in ("dPdRho_T", "dPdT_Rho", "Cv"))
+    have_src2 = (not ignore_source_derivs) and all(
+        c in source.columns for c in ("dPdRho_T", "dPdT_Rho", "Cv")
+    )
     if have_src2:
         dPdRho_T = np.array(source.columns["dPdRho_T"], dtype=float)
         dPdT_Rho = np.array(source.columns["dPdT_Rho"], dtype=float)
@@ -291,6 +298,10 @@ def build_nodal_data(
     cv_stab = (f_tau - f_tautau) / T
 
     fd_notes = []
+    if ignore_source_derivs and all(
+        c in source.columns for c in ("dPdRho_T", "dPdT_Rho", "Cv")
+    ):
+        fd_notes.append("forced_fd_ignore_source_derivs")
     if zero_twist:
         f_xixitau = np.zeros_like(f_xi)
         f_xitautau = np.zeros_like(f_xi)

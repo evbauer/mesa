@@ -56,6 +56,24 @@ def test_second_derivs_from_source_exact():
     assert np.allclose(nd.datasets["f_tautau"], exact["f_tautau"], rtol=1e-12)
 
 
+def test_ignore_source_derivs_forces_fd():
+    """``ignore_source_derivs`` takes the finite-difference path even when the
+    dPdRho_T/dPdT_Rho/Cv columns are present: the flag is cleared, the scheme is
+    annotated, and the second derivatives match a source with those columns
+    dropped entirely (pure FD)."""
+    src = _source(False, second=True)
+    nd_src = build_nodal_data(src, order=5)
+    nd_fd = build_nodal_data(src, order=5, ignore_source_derivs=True)
+    assert nd_src.attrs["second_derivs_from_source"] == 1
+    assert nd_fd.attrs["second_derivs_from_source"] == 0
+    assert "forced_fd_ignore_source_derivs" in nd_fd.attrs["fd_scheme"]
+    # same result as building from a source lacking the second-derivative columns
+    src_noder = _source(False, second=False)
+    nd_noder = build_nodal_data(src_noder, order=5)
+    for key in ("f_xixi", "f_tautau", "f_xitau", "f_xixitau", "f_xitautau"):
+        assert np.allclose(nd_fd.datasets[key], nd_noder.datasets[key]), key
+
+
 def test_second_derivs_fxixi_relation_no_rho_factor():
     """Guard the corrected relation f_xixi = (dP/drho)_T - f_xi (no rho factor):
     for the ideal gas (dP/drho)_T == f_xi so f_xixi must be ~0, which the

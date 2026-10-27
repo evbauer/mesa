@@ -89,6 +89,7 @@ def build_one(
     zero_twist: bool = False,
     e_offset: float = 0.0,
     f_offset: float = 0.0,
+    ignore_source_derivs: bool = False,
     write_audit: bool = True,
 ) -> dict:
     """End-to-end: read source, build nodal data, (audit,) write processed."""
@@ -100,6 +101,7 @@ def build_one(
         zero_twist=zero_twist,
         e_offset=e_offset,
         f_offset=f_offset,
+        ignore_source_derivs=ignore_source_derivs,
     )
     attrs = dict(nodal.attrs)
     attrs.update(
@@ -128,6 +130,7 @@ def cmd_build(args) -> int:
         zero_twist=args.zero_twist,
         e_offset=args.e_offset,
         f_offset=args.f_offset,
+        ignore_source_derivs=args.ignore_source_derivs,
         write_audit=not args.no_audit,
     )
     print(
@@ -191,6 +194,12 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--order", type=int, choices=(3, 5), default=5)
     pb.add_argument("--fxt-route", type=int, choices=(1, 2, 3), default=1)
     pb.add_argument("--zero-twist", action="store_true")
+    pb.add_argument(
+        "--ignore-source-derivs",
+        action="store_true",
+        help="ignore supplied dPdRho_T/dPdT_Rho/Cv; use finite differences for "
+        "the second derivatives (second_derivs_from_source=0)",
+    )
     pb.add_argument("--e-offset", type=float, default=0.0)
     pb.add_argument("--f-offset", type=float, default=0.0)
     pb.add_argument("--no-audit", action="store_true")
