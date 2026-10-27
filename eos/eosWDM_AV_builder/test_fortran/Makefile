@@ -31,7 +31,7 @@ force_wdm_mods:
 $(BUILD_DIR_MODULE)/depend: force_wdm_mods
 
 # copy the built executable here as ./test_interp so it can be run directly
-all: ./test_interp ./test_mix
+all: ./test_interp ./test_mix ./mix_vs_reference
 ./test_interp: $(OBJ_OUT)
 	cp $(OBJ_OUT) ./test_interp
 
@@ -41,10 +41,21 @@ all: ./test_interp ./test_mix
 	$(FCOMPILE) test_mix.f90 -o test_mix.o
 	$(EXECUTABLE) -o ./test_mix test_mix.o $(LIB_DEP_ARGS)
 
+# mix_vs_reference: mixture-level validation of the integrated WDM_AV eosDT
+# component (WP4b).  Built the same way as test_mix.  It only uses the public
+# eos_lib/eos_def API (eosDT_get_component), so force_wdm_mods is not strictly
+# required, but is kept as a dependency for consistency with the other targets.
+./mix_vs_reference: mix_vs_reference.f90 force_wdm_mods
+	$(FCOMPILE) mix_vs_reference.f90 -o mix_vs_reference.o
+	$(EXECUTABLE) -o ./mix_vs_reference mix_vs_reference.o $(LIB_DEP_ARGS)
+
 # build and run the interpolation test
 test: ./test_interp
 	./test_interp
 
 test2: ./test_mix
 	./test_mix
+
+test3: ./mix_vs_reference
+	./mix_vs_reference skye
 

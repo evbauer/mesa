@@ -3,3 +3,4 @@ build.log
 run.log
 test_interp
 test_mix
+mix_vs_reference
