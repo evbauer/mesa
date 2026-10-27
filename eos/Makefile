@@ -19,6 +19,7 @@ SRCS := public/eos_def.f90 \
         private/eos_wdm_av_def.f90 \
         private/eos_wdm_av_load.f90 \
         private/eos_wdm_av_interp.f90 \
+        private/eos_wdm_av_mix.f90 \
         private/eospc_eval.f90 \
         private/eospt_eval.f90 \
         private/gauss_fermi.f90 \
