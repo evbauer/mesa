@@ -64,10 +64,13 @@ DATA_ROOT = Path("/Users/bauer39/work/mesas/evbauer/mesa/data/eosWDM_AV_data")
 REF_DIRS = {
     "skye": DATA_ROOT / "reference_skye_mixtures",
     "helm": DATA_ROOT / "reference_helm_mixtures",
+    "skye_fd": DATA_ROOT
+    / "reference_skye_mixtures",  # P,E,F-only tables, FD 2nd derivs
 }
 OUT_DIRS = {
     "skye": DATA_ROOT / "validation_mixtures" / "skye",
     "helm": DATA_ROOT / "validation_mixtures" / "helm",
+    "skye_fd": DATA_ROOT / "validation_mixtures" / "skye_fd",
 }
 SOURCE_DIR = DATA_ROOT / "source_skye"  # atomic weights (identical for helm)
 
@@ -369,7 +372,7 @@ def comparison_quantities(
     # gas pressure: gas-only on both sides, directly comparable
     out["P"] = {"w": np.exp(wc("lnPgas")), "r": np.exp(rc("lnPgas")), "kind": "rel"}
 
-    if table_set == "skye":
+    if table_set.startswith("skye"):
         ds = delta_s_ideal(comp)
         dE = ion_offset_dE(comp)
         extra["delta_s_ideal"] = ds
@@ -803,7 +806,14 @@ def markdown_report(summaries: list[dict]) -> str:
     # (A) aggregate median table, per set and region
     lines.append("## Aggregate median relative error (median over the 5 mixtures)")
     lines.append("")
-    for table_set, tag in (("skye", "(a) Skye"), ("helm", "(b) HELM")):
+    for table_set, tag in (
+        ("skye", "(a) Skye"),
+        ("helm", "(b) HELM"),
+        (
+            "skye_fd",
+            "(c) Skye reference, tables built from P, E, F only (FD second derivatives)",
+        ),
+    ):
         present = [s for s in summaries if s["table_set"] == table_set]
         if not present:
             continue
@@ -854,7 +864,7 @@ def markdown_report(summaries: list[dict]) -> str:
     lines.append("|" + "---|" * 8)
     for s in summaries:
         unc = s.get("uncorrected", {})
-        if s["table_set"] == "skye":
+        if s["table_set"].startswith("skye"):
             su = unc.get("S_uncorrected", {})
             lines.append(
                 f"| skye | {s['mixture']} | S | {s['delta_s_ideal']:.3e} | "
@@ -953,7 +963,10 @@ def build_parser() -> argparse.ArgumentParser:
         description="mixture-level WDM_AV validation vs Skye/HELM",
     )
     p.add_argument(
-        "--sets", nargs="+", default=["skye", "helm"], choices=["skye", "helm"]
+        "--sets",
+        nargs="+",
+        default=["skye", "helm", "skye_fd"],
+        choices=["skye", "helm", "skye_fd"],
     )
     p.add_argument("--mixtures", nargs="+", default=list(MIXTURES))
     p.add_argument("--figdir", default=str(DEFAULT_FIGDIR))

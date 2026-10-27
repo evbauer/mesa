@@ -114,9 +114,11 @@ program mix_vs_reference
    if (len_trim(table_set) > 0) rq% WDM_AV_table_set = trim(table_set)
    table_set = trim(rq% WDM_AV_table_set)
 
-   if (trim(table_set) == 'skye') then
+   ! any set whose name starts with 'skye' (e.g. skye_fd) is compared with the Skye
+   ! references, likewise 'helm'
+   if (index(trim(table_set), 'skye') == 1) then
       ref_dir = trim(data_root)//'/reference_skye_mixtures'
-   else if (trim(table_set) == 'helm') then
+   else if (index(trim(table_set), 'helm') == 1) then
       ref_dir = trim(data_root)//'/reference_helm_mixtures'
    else
       write(*,'(a)') 'unknown table set "'//trim(table_set)//'" (expected skye or helm)'

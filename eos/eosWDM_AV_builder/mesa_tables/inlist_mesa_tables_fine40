@@ -1,0 +1,22 @@
+&eos
+   include_radiation = .false.
+   use_Skye = .true.
+   Skye_use_ion_offsets = .true.
+/
+
+&table_controls
+   ! Fine (40 points/decade) Skye source tables over a reduced region, used only
+   ! to run the held-out study at the production resolution of 20 points/decade
+   ! (heldout.py coarsens by 2). Output goes to a separate root.
+   logRho_min = -4.0d0
+   logRho_max = 8.0d0
+   logT_min   = 3.0d0
+   logT_max   = 9.0d0
+   pts_per_decade     = 40
+   pts_per_decade_mix = 10
+   n_iso = 3
+   iso_names(1) = 'he4'
+   iso_names(2) = 'c12'
+   iso_names(3) = 'o16'
+   output_root = '/Users/bauer39/work/mesas/evbauer/mesa/data/eosWDM_AV_data/fine40'
+/
