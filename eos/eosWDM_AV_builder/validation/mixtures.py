@@ -87,6 +87,28 @@ MIXTURES = (
 
 KBM = C.kerg / C.amu  # k_B / m_u  (erg g^-1 K^-1)
 
+# eV -> erg (CODATA 2018, matches MESA const_def ev2erg)
+EV2ERG = 1.602176634e-12
+
+# Total electron binding (full-ionization) energies I_Z in eV, indexed by nuclear
+# charge Z, exactly as in eos/private/ion_offset.f90 (compute_ion_offset, NIST
+# H-Ni total binding energies).  Only the first 12 are needed for the reference
+# mixtures (H..Mg).
+ION_EV = {
+    1: 13.598434599702,
+    2: 79.0051545,
+    3: 203.4861711,
+    4: 399.14864,
+    5: 670.9809,
+    6: 1030.1085,
+    7: 1486.058,
+    8: 2043.8428,
+    9: 2715.89,
+    10: 3511.696,
+    11: 4420.0,
+    12: 5451.06,
+}
+
 # the five relative-error quantities drawn on the maps, in panel order
 MAP_QUANTITIES = (
     "P",
@@ -241,22 +263,31 @@ def parse_composition(comp_str: str) -> dict[str, float]:
 
 
 _A_CACHE: dict[str, float] = {}
+_Z_CACHE: dict[str, int] = {}
+
+
+def _source_header_value(name: str, key: str) -> str:
+    src = SOURCE_DIR / f"eosWDM_AV_{name}.txt"
+    with open(src) as fh:
+        for ln in fh:
+            toks = ln.split()
+            if len(toks) >= 2 and toks[0] == key:
+                return toks[1]
+    raise ValueError(f"no {key} header in {src}")
 
 
 def atomic_weight(name: str) -> float:
     """Atomic weight A for an isotope, read from the source-table header."""
     if name not in _A_CACHE:
-        src = SOURCE_DIR / f"eosWDM_AV_{name}.txt"
-        a = None
-        with open(src) as fh:
-            for ln in fh:
-                if ln.startswith("A "):
-                    a = float(ln.split()[1])
-                    break
-        if a is None:
-            raise ValueError(f"no A header in {src}")
-        _A_CACHE[name] = a
+        _A_CACHE[name] = float(_source_header_value(name, "A"))
     return _A_CACHE[name]
+
+
+def charge(name: str) -> int:
+    """Nuclear charge Z for an isotope, read from the source-table header."""
+    if name not in _Z_CACHE:
+        _Z_CACHE[name] = int(_source_header_value(name, "Z"))
+    return _Z_CACHE[name]
 
 
 # --------------------------------------------------------------------------
@@ -277,6 +308,28 @@ def delta_s_ideal(comp: dict[str, float]) -> float:
     return -KBM * sum(n[k] * np.log(y[k]) for k in comp if y[k] > 0)
 
 
+def ion_offset_dE(comp: dict[str, float]) -> float:
+    """Skye ion-offset non-additivity correction for energy (erg/g).
+
+    Skye's ``compute_ion_offset`` (eos/private/ion_offset.f90) adds the mixture
+    ion offset ``sum_k y_k I_{Z_k} / m_u`` (number fractions ``y_k``), whereas
+    WDM_AV builds the mixture from per-species tables and so carries the
+    mass-weighted pure-species offset ``sum_k X_k I_{Z_k} / m_u``.  The two differ
+    by a composition-only constant.  Adding this to the Skye reference E puts it on
+    the WDM_AV (mass-weighted) convention:
+
+        dE = (sum_k X_k I_k - sum_k y_k I_k) * ev2erg / m_u .
+    """
+    n = {k: comp[k] / atomic_weight(k) for k in comp}
+    ntot = sum(n.values())
+    if ntot <= 0:
+        return 0.0
+    y = {k: n[k] / ntot for k in comp}
+    sum_X_I = sum(comp[k] * ION_EV[charge(k)] for k in comp)
+    sum_y_I = sum(y[k] * ION_EV[charge(k)] for k in comp)
+    return (sum_X_I - sum_y_I) * EV2ERG / C.amu
+
+
 def _col(arr: np.ndarray, cols: dict, name: str) -> np.ndarray:
     return arr[:, cols[name]]
 
@@ -288,11 +341,18 @@ def comparison_quantities(
     comp: dict[str, float],
     logrho: np.ndarray,
     logt: np.ndarray,
+    apply_skye_e_offset: bool = False,
 ) -> dict:
     """Build (wdm, ref) arrays for each compared quantity for one mixture/set.
 
     Returns dict ``name -> {"w": ..., "r": ..., "kind": "rel"|"abs"}`` plus the
-    auxiliary ``_extra`` dict (S_uncorrected, radiation-clean mask, delta_s).
+    auxiliary ``extra`` dict (uncorrected-comparison evidence, radiation-clean
+    mask, delta_s, ion-offset dE).
+
+    ``apply_skye_e_offset`` (default False): Skye's ion-offset bug is now fixed
+    upstream (PR #1097), so Skye's mixture E is additive apart from genuine
+    Coulomb mixing and the comparison uses the RAW Skye E.  Set True to restore
+    the old ``dE`` reference-energy correction (kept for provenance).
     """
     rho = np.power(10.0, logrho)
     T = np.power(10.0, logt)
@@ -311,13 +371,27 @@ def comparison_quantities(
 
     if table_set == "skye":
         ds = delta_s_ideal(comp)
+        dE = ion_offset_dE(comp)
         extra["delta_s_ideal"] = ds
+        extra["ion_offset_dE"] = dE
         S_ref = np.exp(rc("lnS"))
         S_ref_corr = S_ref - ds
         S_wdm = np.exp(wc("lnS"))
-        out["E"] = {"w": np.exp(wc("lnE")), "r": np.exp(rc("lnE")), "kind": "rel"}
+        E_wdm = np.exp(wc("lnE"))
+        E_ref = np.exp(rc("lnE"))
+        # (c) Skye ion-offset non-additivity.  Fixed upstream (PR #1097): the
+        # mixture E is now additive, so by default compare the RAW Skye E.  The
+        # dE-corrected comparison is retained as evidence (and can be made primary
+        # with apply_skye_e_offset=True).
+        E_ref_corr = E_ref + dE
+        if apply_skye_e_offset:
+            out["E"] = {"w": E_wdm, "r": E_ref_corr, "kind": "rel"}
+            extra["E_raw"] = {"w": E_wdm, "r": E_ref, "kind": "rel"}
+        else:
+            out["E"] = {"w": E_wdm, "r": E_ref, "kind": "rel"}
+            extra["E_offset_applied"] = {"w": E_wdm, "r": E_ref_corr, "kind": "rel"}
         out["S"] = {"w": S_wdm, "r": S_ref_corr, "kind": "rel"}
-        # evidence: entropy WITHOUT the F1 correction
+        # evidence: entropy comparison WITHOUT the F1 correction
         extra["S_uncorrected"] = {"w": S_wdm, "r": S_ref, "kind": "rel"}
         out["chiRho"] = {"w": wc("chiRho"), "r": rc("chiRho"), "kind": "rel"}
         out["chiT"] = {"w": wc("chiT"), "r": rc("chiT"), "kind": "rel"}
@@ -348,7 +422,14 @@ def comparison_quantities(
             "r": np.exp(rc("lnE")),
             "kind": "rel",
         }
-        out["S"] = {"w": S_wdm_gas, "r": np.exp(rc("lnS")), "kind": "rel"}
+        # (b) HELM carries NO ideal mixing entropy (mean-ion treatment), while
+        # WDM_AV adds it once.  Put the HELM reference S on the WDM_AV convention
+        # by ADDING Delta s_ideal.  Report both raw and corrected.
+        ds = delta_s_ideal(comp)
+        extra["delta_s_ideal"] = ds
+        S_ref_helm = np.exp(rc("lnS"))
+        out["S"] = {"w": S_wdm_gas, "r": S_ref_helm + ds, "kind": "rel"}
+        extra["S_uncorrected"] = {"w": S_wdm_gas, "r": S_ref_helm, "kind": "rel"}
         out["Cv"] = {"w": wc("Cv") - cv_rad, "r": rc("Cv"), "kind": "rel"}
         # gas-only chiRho/chiT: WDM_AV's chi refer to TOTAL pressure (like Skye),
         # but its dlnPgas/dln{rho,T} columns are exactly the gas-only chi.
@@ -468,7 +549,14 @@ def mixture_floor(
 # --------------------------------------------------------------------------
 # per mixture driver
 # --------------------------------------------------------------------------
-def run_one(table_set: str, mixture: str, *, figdir: Path, floor: dict) -> dict:
+def run_one(
+    table_set: str,
+    mixture: str,
+    *,
+    figdir: Path,
+    floor: dict,
+    apply_skye_e_offset: bool = False,
+) -> dict:
     ref_path = REF_DIRS[table_set] / f"{mixture}.txt"
     out_path = OUT_DIRS[table_set] / f"{mixture}.txt"
     hdr = read_header(out_path)
@@ -489,7 +577,9 @@ def run_one(table_set: str, mixture: str, *, figdir: Path, floor: dict) -> dict:
     ref_valid = np.isfinite(_col(ref, REF_COLS, "lnPgas"))
     both = wdm_valid & ref_valid
 
-    cq = comparison_quantities(table_set, ref, wdm, comp, logrho, logt)
+    cq = comparison_quantities(
+        table_set, ref, wdm, comp, logrho, logt, apply_skye_e_offset
+    )
     reg = regions(logrho, logt)
 
     summary = {
@@ -497,6 +587,7 @@ def run_one(table_set: str, mixture: str, *, figdir: Path, floor: dict) -> dict:
         "mixture": mixture,
         "composition": comp,
         "delta_s_ideal": cq["extra"].get("delta_s_ideal"),
+        "ion_offset_dE": cq["extra"].get("ion_offset_dE"),
         "n_nodes": int(logrho.size),
         "n_wdm_valid": int(wdm_valid.sum()),
         "n_ref_valid": int(ref_valid.sum()),
@@ -504,7 +595,7 @@ def run_one(table_set: str, mixture: str, *, figdir: Path, floor: dict) -> dict:
         "n_ref_valid_wdm_declined": int((ref_valid & ~wdm_valid).sum()),
         "coverage": {},
         "quantities": {},
-        "S_uncorrected": {},
+        "uncorrected": {},
         "floor": {},
     }
 
@@ -531,12 +622,14 @@ def run_one(table_set: str, mixture: str, *, figdir: Path, floor: dict) -> dict:
             qstat[rn] = stats(err, m)
         summary["quantities"][q] = qstat
 
-    # uncorrected-entropy evidence (skye only)
-    if "S_uncorrected" in cq["extra"]:
-        spec = cq["extra"]["S_uncorrected"]
-        err, ok = error_array(spec["w"], spec["r"], spec["kind"], both)
-        for rn in REGION_NAMES:
-            summary["S_uncorrected"][rn] = stats(err, reg[rn] & ok)
+    # reference-correction evidence: the alternative (uncorrected / offset-applied)
+    # comparisons, so the raw-vs-corrected effect is on record.
+    for key, spec in cq["extra"].items():
+        if isinstance(spec, dict) and "kind" in spec:
+            err, ok = error_array(spec["w"], spec["r"], spec["kind"], both)
+            summary["uncorrected"][key] = {
+                rn: stats(err, reg[rn] & ok) for rn in REGION_NAMES
+            }
 
     # interpolation floor
     for rn in ("skye_valid", "target"):
@@ -554,6 +647,7 @@ def plot_maps(table_set, mixture, logrho, logt, maps, figdir: Path):
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.colors import TwoSlopeNorm
 
     # infer the grid shape (logT outer, logRho inner)
     nR = int(np.sum(logt == logt[0]))
@@ -561,32 +655,41 @@ def plot_maps(table_set, mixture, logrho, logt, maps, figdir: Path):
     LR = logrho.reshape(nT, nR)
     LT = logt.reshape(nT, nR)
 
+    # Uniform error-map convention (all WDM_AV error maps): log10 relative error on
+    # a diverging RdBu_r scale centred at -3, blue (better) to -7, red (worse) to
+    # +1, saturating beyond both ends; no-data cells (declined / NaN) masked and
+    # drawn light grey so they are never confused with the scale's midpoint.
+    norm = TwoSlopeNorm(vmin=-7.0, vcenter=-3.0, vmax=1.0)
+    cmap = plt.get_cmap("coolwarm").copy()
+    cmap.set_under(cmap(0.0))
+    cmap.set_over(cmap(1.0))
+    cmap.set_bad("white")
+
     figdir.mkdir(parents=True, exist_ok=True)
     fig, axes = plt.subplots(2, 4, figsize=(17, 8))
     axes = axes.ravel()
+    im = None
     for ax, q in zip(axes, MAP_QUANTITIES):
-        z = maps[q].reshape(nT, nR)
         with np.errstate(divide="ignore"):
-            lz = np.log10(z)
-        finite = np.isfinite(lz)
-        if finite.any():
-            vmax = np.nanpercentile(lz[finite], 99.5)
-            vmin = max(np.nanmin(lz[finite]), vmax - 8.0)
-        else:
-            vmin, vmax = -16.0, 0.0
-        im = ax.pcolormesh(
-            LR, LT, lz, shading="auto", cmap="viridis", vmin=vmin, vmax=vmax
-        )
-        ax.axhline(6.5, color="w", lw=0.6, ls="--", alpha=0.6)
-        ax.axvline(3.7, color="w", lw=0.6, ls="--", alpha=0.6)
+            lz = np.log10(maps[q].reshape(nT, nR))
+        lz = np.ma.masked_invalid(lz)
+        ax.set_facecolor("white")
+        im = ax.pcolormesh(LR, LT, lz, shading="auto", cmap=cmap, norm=norm)
+        # outline the no-data regions so white cannot be read as the gray midpoint
+        _m = np.ma.getmaskarray(lz).astype(float)
+        if _m.any() and not _m.all():
+            ax.contour(LR, LT, _m, levels=[0.5], colors="0.3", linewidths=0.5)
+        ax.axhline(6.5, color="k", lw=0.6, ls="--", alpha=0.5)
+        ax.axvline(3.7, color="k", lw=0.6, ls="--", alpha=0.5)
         # target box
-        ax.plot([-2, 4, 4, -2, -2], [3, 3, 7, 7, 3], color="r", lw=0.7, alpha=0.7)
+        ax.plot([-2, 4, 4, -2, -2], [3, 3, 7, 7, 3], color="k", lw=0.8, alpha=0.7)
         ax.set_title(f"{q}  log10|rel err|", fontsize=9)
         ax.set_xlabel("logRho")
         ax.set_ylabel("logT")
-        plt.colorbar(im, ax=ax)
     fig.suptitle(f"WDM_AV({table_set}) vs {table_set}-on-mixture: {mixture}")
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 0.93, 1))
+    cbar = fig.colorbar(im, ax=axes.tolist(), extend="both", fraction=0.046, pad=0.02)
+    cbar.set_label("log10 |relative error|")
     path = figdir / f"{table_set}_{mixture}.png"
     fig.savefig(path, dpi=110)
     plt.close(fig)
@@ -634,19 +737,20 @@ def write_reports(summaries: list[dict], resultsdir: Path) -> dict[str, Path]:
                             **st,
                         }
                     )
-            for region in REGION_NAMES:
-                st = s["S_uncorrected"].get(region)
-                if st:
-                    w.writerow(
-                        {
-                            "table_set": s["table_set"],
-                            "mixture": s["mixture"],
-                            "quantity": "S_uncorrected",
-                            "kind": "rel",
-                            "region": region,
-                            **st,
-                        }
-                    )
+            for key, regs in s.get("uncorrected", {}).items():
+                for region in REGION_NAMES:
+                    st = regs.get(region)
+                    if st:
+                        w.writerow(
+                            {
+                                "table_set": s["table_set"],
+                                "mixture": s["mixture"],
+                                "quantity": key,
+                                "kind": "rel",
+                                "region": region,
+                                **st,
+                            }
+                        )
 
     md_path = resultsdir / "mixtures_summary.md"
     md_path.write_text(markdown_report(summaries))
@@ -682,15 +786,17 @@ def markdown_report(summaries: list[dict]) -> str:
     lines = [
         "# Mixture-level WDM_AV validation vs Skye / HELM",
         "",
-        "Relative error of the additive-volume WDM_AV mixture (integrated eosDT "
-        "path, `eosDT_get_component(i_eos_WDM_AV)`) against Skye / HELM run "
-        "directly on the same five reference mixtures, at the reference grid "
-        "nodes where both sides are finite. `S` is the F1-corrected entropy for "
-        "Skye (reference minus `Delta s_ideal`); for HELM, radiation is stripped "
-        "from WDM_AV's e/s/Cv and gas-only chiRho/chiT come from WDM_AV's "
-        "dlnPgas columns. HELM grad_ad/gamma1 mix a radiation-definition "
-        "difference and are taken only where Prad/Pgas < 1e-2. Full per-mixture, "
-        "per-region data (p90, p99, max, all quantities) is in the CSV/JSON.",
+        (
+            "Relative error of the additive-volume WDM_AV mixture (integrated eosDT "
+            "path, `eosDT_get_component(i_eos_WDM_AV)`) against Skye / HELM run "
+            "directly on the same five reference mixtures, at the reference grid "
+            "nodes where both sides are finite. `S` is the F1-corrected entropy for "
+            "Skye (reference minus `Delta s_ideal`); for HELM, radiation is stripped "
+            "from WDM_AV's e/s/Cv and gas-only chiRho/chiT come from WDM_AV's "
+            "dlnPgas columns. HELM grad_ad/gamma1 mix a radiation-definition "
+            "difference and are taken only where Prad/Pgas < 1e-2. Full per-mixture, "
+            "per-region data (p90, p99, max, all quantities) is in the CSV/JSON."
+        ),
         "",
     ]
 
@@ -726,32 +832,55 @@ def markdown_report(summaries: list[dict]) -> str:
                 lines.append("| " + " | ".join(row) + " |")
         lines.append("")
 
-    # (C) F1 evidence: S uncorrected vs corrected (Skye)
-    lines.append("## Entropy: F1 correction evidence (Skye)")
+    # (C) reference corrections: primary vs alternative evidence
+    lines.append("## Reference corrections: primary vs alternative")
     lines.append("")
     lines.append(
-        "Median relative error of S without and with the F1 correction "
-        "(subtracting `Delta s_ideal` from the Skye reference). The correction "
-        "removes the systematic entropy offset from Skye's double-counted ideal "
-        "mixing entropy."
+        "Corrections before comparison. (1) Skye S: subtract `Delta s_ideal` "
+        "(Finding F1, Skye double-counts the ideal mixing entropy). (2) HELM S: "
+        "ADD `Delta s_ideal` (HELM's mean-ion treatment carries no ideal mixing "
+        "entropy, while WDM_AV adds it once). (3) Skye E: the ion-offset bug is "
+        "fixed upstream (PR #1097), so the Skye mixture E is now additive and the "
+        "comparison uses the RAW Skye E by default; the old `dE` offset correction "
+        "is retained but OFF. The `primary` column is the reported comparison; "
+        "`alt` is the other convention (S: uncorrected; Skye E: dE-offset applied; "
+        "HELM S: raw). Median relative error."
     )
     lines.append("")
     lines.append(
-        "| mixture | Delta_s_ideal [erg/g/K] | S uncorr (skye_valid) | "
-        "S corr (skye_valid) | S uncorr (target) | S corr (target) |"
+        "| set | mixture | quantity | Delta_s / dE | primary (skye_valid) | "
+        "alt (skye_valid) | primary (target) | alt (target) |"
     )
-    lines.append("|" + "---|" * 6)
+    lines.append("|" + "---|" * 8)
     for s in summaries:
-        if s["table_set"] != "skye":
-            continue
-        unc_sv = s["S_uncorrected"].get("skye_valid", {}).get("median")
-        cor_sv = s["quantities"]["S"]["skye_valid"]["median"]
-        unc_tg = s["S_uncorrected"].get("target", {}).get("median")
-        cor_tg = s["quantities"]["S"]["target"]["median"]
-        lines.append(
-            f"| {s['mixture']} | {s['delta_s_ideal']:.3e} | {_fmt(unc_sv)} | "
-            f"{_fmt(cor_sv)} | {_fmt(unc_tg)} | {_fmt(cor_tg)} |"
-        )
+        unc = s.get("uncorrected", {})
+        if s["table_set"] == "skye":
+            su = unc.get("S_uncorrected", {})
+            lines.append(
+                f"| skye | {s['mixture']} | S | {s['delta_s_ideal']:.3e} | "
+                f"{_fmt(s['quantities']['S']['skye_valid']['median'])} | "
+                f"{_fmt(su.get('skye_valid', {}).get('median'))} | "
+                f"{_fmt(s['quantities']['S']['target']['median'])} | "
+                f"{_fmt(su.get('target', {}).get('median'))} |"
+            )
+            # alt E = whichever of E_raw / E_offset_applied is present
+            ea = unc.get("E_offset_applied") or unc.get("E_raw") or {}
+            lines.append(
+                f"| skye | {s['mixture']} | E | {s['ion_offset_dE']:.3e} | "
+                f"{_fmt(s['quantities']['E']['skye_valid']['median'])} | "
+                f"{_fmt(ea.get('skye_valid', {}).get('median'))} | "
+                f"{_fmt(s['quantities']['E']['target']['median'])} | "
+                f"{_fmt(ea.get('target', {}).get('median'))} |"
+            )
+        else:
+            su = unc.get("S_uncorrected", {})
+            lines.append(
+                f"| helm | {s['mixture']} | S | {s['delta_s_ideal']:.3e} | "
+                f"{_fmt(su.get('skye_valid', {}).get('median'))} | "
+                f"{_fmt(s['quantities']['S']['skye_valid']['median'])} | "
+                f"{_fmt(su.get('target', {}).get('median'))} | "
+                f"{_fmt(s['quantities']['S']['target']['median'])} |"
+            )
     lines.append("")
 
     # (D) HELM interpolation floor vs observed AV error
@@ -830,6 +959,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--figdir", default=str(DEFAULT_FIGDIR))
     p.add_argument("--resultsdir", default=str(DEFAULT_RESULTSDIR))
     p.add_argument("--heldout", default=str(DEFAULT_HELDOUT))
+    p.add_argument(
+        "--apply-skye-e-offset",
+        action="store_true",
+        help="apply the old Skye ion-offset dE energy correction (default off: "
+        "the ion-offset bug is fixed upstream, so the raw Skye E is additive)",
+    )
     return p
 
 
@@ -841,7 +976,13 @@ def main(argv: list[str] | None = None) -> int:
     for table_set in args.sets:
         for mixture in args.mixtures:
             print(f"mixtures: {table_set}  {mixture}")
-            summary = run_one(table_set, mixture, figdir=figdir, floor=floor)
+            summary = run_one(
+                table_set,
+                mixture,
+                figdir=figdir,
+                floor=floor,
+                apply_skye_e_offset=args.apply_skye_e_offset,
+            )
             summaries.append(summary)
             tgt = summary["quantities"]
             msg = "  ".join(

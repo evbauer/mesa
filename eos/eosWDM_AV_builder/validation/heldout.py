@@ -157,6 +157,20 @@ def _omitted_mask(ntau: int, nxi: int) -> np.ndarray:
     return ~in_coarse
 
 
+def _cellcenter_mask(ntau: int, nxi: int) -> np.ndarray:
+    """Cell-center fine nodes: odd index in BOTH directions.
+
+    These sit at the geometric centre of a coarse cell, the farthest from every
+    coarse node, so they are a uniform, maximally-interpolated subset of the
+    held-out nodes.  Plotting only these removes the alternating stripe pattern
+    that the edge-centred held-out nodes (odd in one direction only, lying on a
+    coarse grid line) produce on the error maps.
+    """
+    j = np.arange(ntau)[:, None]
+    i = np.arange(nxi)[None, :]
+    return (i % 2 == 1) & (j % 2 == 1)
+
+
 def _cell_valid(valid_coarse: np.ndarray, ixi: np.ndarray, itau: np.ndarray):
     """True where all four coarse corners of the enclosing cell are valid."""
     v = valid_coarse.astype(bool)
@@ -198,6 +212,7 @@ def run_one(
     logrho, logt = source.logrho, source.logt
     logrho2d, logt2d = np.meshgrid(logrho, logt)
     omitted = _omitted_mask(ntau, nxi)
+    cellcenter = _cellcenter_mask(ntau, nxi)
     regions = _regions(logrho2d, logt2d)
 
     truth = _truth(source)
@@ -231,6 +246,12 @@ def run_one(
             qstat = {
                 name: _stats(relerr, good & regions[name]) for name in REGION_NAMES
             }
+            # cell-center-only statistics (odd index in both directions): the
+            # uniform, maximally-interpolated held-out subset drawn on the maps.
+            qstat["cell_center"] = {
+                name: _stats(relerr, good & cellcenter & regions[name])
+                for name in REGION_NAMES
+            }
             # location of the worst Skye-region error, with the values there
             region = good & regions["skye_valid"]
             if region.any():
@@ -256,30 +277,45 @@ def _plot_variant(label, variant, logrho, logt, maps, figdir: Path):
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.colors import TwoSlopeNorm
+
+    # Uniform error-map convention (all WDM_AV error maps): log10 relative error on
+    # a diverging RdBu_r scale centred at -3, blue (better) to -7, red (worse) to
+    # +1, saturating beyond both ends; no-data cells masked and drawn light grey.
+    norm = TwoSlopeNorm(vmin=-7.0, vcenter=-3.0, vmax=1.0)
+    cmap = plt.get_cmap("coolwarm").copy()
+    cmap.set_under(cmap(0.0))
+    cmap.set_over(cmap(1.0))
+    cmap.set_bad("white")
+
+    # cell-center subgrid (odd index in both directions): a regular grid, so the
+    # map is continuous with no white gaps between the plotted held-out nodes.
+    lr_cc = logrho[1::2]
+    lt_cc = logt[1::2]
 
     figdir.mkdir(parents=True, exist_ok=True)
     fig, axes = plt.subplots(2, 3, figsize=(13, 7.5))
     axes = axes.ravel()
+    im = None
     for ax, q in zip(axes, QUANTITIES):
         with np.errstate(divide="ignore"):
-            z = np.log10(maps[q])  # NaN stays NaN; exact-zero error -> -inf
-        finite = np.isfinite(z)
-        if finite.any():
-            vmax = np.nanpercentile(z[finite], 99.5)
-            vmin = max(np.nanmin(z[finite]), vmax - 8.0)
-        else:
-            vmin, vmax = -16, 0
-        im = ax.pcolormesh(
-            logrho, logt, z, shading="auto", cmap="viridis", vmin=vmin, vmax=vmax
-        )
-        ax.axhline(6.5, color="w", lw=0.6, ls="--", alpha=0.6)
-        ax.axvline(3.7, color="w", lw=0.6, ls="--", alpha=0.6)
+            z = np.log10(maps[q][1::2, 1::2])  # NaN stays NaN; exact 0 -> -inf
+        z = np.ma.masked_invalid(z)
+        ax.set_facecolor("white")
+        im = ax.pcolormesh(lr_cc, lt_cc, z, shading="auto", cmap=cmap, norm=norm)
+        # outline the no-data regions so white cannot be read as the gray midpoint
+        _m = np.ma.getmaskarray(z).astype(float)
+        if _m.any() and not _m.all():
+            ax.contour(lr_cc, lt_cc, _m, levels=[0.5], colors="0.3", linewidths=0.5)
+        ax.axhline(6.5, color="k", lw=0.6, ls="--", alpha=0.5)
+        ax.axvline(3.7, color="k", lw=0.6, ls="--", alpha=0.5)
         ax.set_title(f"{q}  log10|rel err|", fontsize=9)
         ax.set_xlabel("logRho")
         ax.set_ylabel("logT")
-        plt.colorbar(im, ax=ax)
     fig.suptitle(f"held-out error: {label}  {VARIANT_LABELS[variant]}")
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 0.92, 1))
+    cbar = fig.colorbar(im, ax=axes.tolist(), extend="both", fraction=0.046, pad=0.02)
+    cbar.set_label("log10 |relative error|")
     path = figdir / f"{label}_{variant}.png"
     fig.savefig(path, dpi=110)
     plt.close(fig)
@@ -311,6 +347,7 @@ def write_reports(summaries: list[dict], resultsdir: Path) -> dict[str, Path]:
         "isotope",
         "variant",
         "quantity",
+        "node_set",
         "region",
         "count",
         "median",
@@ -325,15 +362,27 @@ def write_reports(summaries: list[dict], resultsdir: Path) -> dict[str, Path]:
             for variant, vsum in s["variants"].items():
                 for q, qstat in vsum["quantities"].items():
                     for region in REGION_NAMES:
-                        st = qstat[region]
                         w.writerow(
                             {
                                 "label": s["label"],
                                 "isotope": s["isotope"],
                                 "variant": variant,
                                 "quantity": q,
+                                "node_set": "all",
                                 "region": region,
-                                **st,
+                                **qstat[region],
+                            }
+                        )
+                    for region in REGION_NAMES:
+                        w.writerow(
+                            {
+                                "label": s["label"],
+                                "isotope": s["isotope"],
+                                "variant": variant,
+                                "quantity": q,
+                                "node_set": "cellcenter",
+                                "region": region,
+                                **qstat["cell_center"][region],
                             }
                         )
 

@@ -9,4 +9,10 @@
 
    ! Ideal mixing entropy model (ions + electrons, AV partial volumes; D8).
    WDM_AV_mixing_entropy = 'ions_electrons'
+
+   ! Debugging: when .true., a solver ierr is returned (recorded as the ierr code
+   ! in the flag column) instead of being converted to a cascade "skip".  This is
+   ! how the per-node convergence histograms are produced.  Set to .false. for
+   ! normal use (the cascade then falls through to the next component on failure).
+   WDM_AV_debug = .false.
 /

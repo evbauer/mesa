@@ -47,6 +47,7 @@ module eos_wdm_av_mix
    use skye_ideal, only: compute_ideal_ele, compute_xne
    use auto_diff
    use math_lib
+   use utils_lib, only: is_bad
 
    implicit none
    private
@@ -243,9 +244,21 @@ contains
 
       real(dp) :: Tk, rho, P0, sumB, L_lo, L_hi, V, S, dL, L_try, V_try
       real(dp) :: xi_try(nsp), chi_try(nsp)
-      real(dp) :: tol, logv
-      integer :: i, it, nexp
+      real(dp) :: tol, logv, prev_resid
+      integer :: i, it, nexp, n_stall
       logical :: have_lo, have_hi, converged
+
+      ! Convergence floors for the outer AV solve (documented at the loop below).
+      ! loose_tol: the residual below which the constraint is "satisfied to the
+      !   attainable round-off floor" on real (interpolated) tables.  The inner
+      !   1-D inversions converge each r_i = L - ln P_i only to ~1e-11, which
+      !   caps |ln V - ln v| (and the Newton step |dL|) at a few 1e-12 -- above
+      !   newton_tol = 1e-12.  loose_tol is set well above that floor.
+      ! step_floor: a Newton step in L this small changes nothing (full
+      !   convergence; analytic tables reach this via newton_tol first).
+      real(dp), parameter :: loose_tol = 1d-9
+      real(dp), parameter :: step_floor = 1d-13
+      integer, parameter :: n_stall_accept = 3
 
       ierr = 0
       n_iter = 0
@@ -286,12 +299,28 @@ contains
          return
       end if
 
-      ! safeguarded Newton with an on-the-fly bracket (V is strictly decreasing
-      ! in L).  Steps that leave the table are backtracked toward the last good L.
+      ! Safeguarded flattened Newton on L = ln P* with an on-the-fly bracket
+      ! (V is strictly decreasing in L).  Three ways to accept a solution:
+      !   (A) resid = |ln V - ln v| < newton_tol    -- full convergence; the
+      !       analytic/ideal tables (r_i ~ 0 to round-off) always reach this.
+      !   (B) |dL| < step_floor                      -- the Newton update to L
+      !       (and hence every xi_i = (r_i + dL)/chi_i) is negligible.
+      !   (C) resid < loose_tol and it has stopped decreasing for n_stall_accept
+      !       consecutive steps -- the real-table round-off floor.  On
+      !       interpolated tables the inner inversions leave r_i ~ 1e-11, so
+      !       resid and |dL| bottom out at a few 1e-12 and the plain
+      !       resid < newton_tol / |dL| < newton_tol tests of the previous
+      !       version were unreachable: the iteration limit-cycled to max_iter
+      !       and returned no_converge.  Accepting the stalled floor fixes that.
+      ! The test is deterministic (no state saved across calls, Decision D15);
+      ! the bracket + bisection safeguard plus the stall counter guarantee the
+      ! loop terminates and cannot limit-cycle.
       have_lo = .false.; have_hi = .false.
       L_lo = L; L_hi = L
       xi_try = xi; chi_try = chi
       converged = .false.
+      prev_resid = huge(1d0)
+      n_stall = 0
       do it = 1, opts% max_iter
          n_iter = it
          resid = abs(log(V) - logv)
@@ -300,6 +329,7 @@ contains
          else
             L_hi = L; have_hi = .true.
          end if
+         ! (A) full convergence
          if (resid < tol) then
             converged = .true.; exit
          end if
@@ -314,10 +344,43 @@ contains
             ierr = wdm_av_ierr_bad_domain; return
          end if
          dL = (V - v_target)/S
-         ! stagnation at the round-off floor: the step can no longer improve L
-         if (abs(dL) < tol) then
+
+         ! (B) negligible Newton step: nothing left to improve
+         if (abs(dL) < step_floor) then
             converged = .true.; exit
          end if
+
+         ! (C) stalled iteration.  The flattened Newton converges quadratically,
+         ! so n_stall_accept consecutive steps with no residual decrease mean it
+         ! has hit a floor.  Two outcomes:
+         !   - resid below loose_tol: the real-table round-off floor (the inner
+         !     1-D inversions pin r_i at ~1e-11, which caps |lnV - lnv| and |dL|
+         !     at a few 1e-12).  Accept the solution.
+         !   - resid still large with a one-sided bracket (V never crossed v):
+         !     the volume constraint cannot be met within the tabulated density
+         !     range -- a partial density is pinned at a table edge (e.g. the
+         !     logRho=10 corner).  Decline as out_of_table (D10) instead of
+         !     running to max_iter and returning a spurious no_converge.
+         if (resid >= 0.9d0*prev_resid) then
+            n_stall = n_stall + 1
+         else
+            n_stall = 0
+         end if
+         if (n_stall >= n_stall_accept) then
+            if (resid < loose_tol) then
+               converged = .true.; exit
+            else
+               ! stalled well above the floor: either a one-sided bracket (the
+               ! root needs a density beyond the table, e.g. the logRho=10
+               ! corner) or a collapsed two-sided bracket straddling a jump in
+               ! V(L) (a non-monotonic inner inversion, so the AV constraint has
+               ! no solution in the attainable range).  Either way no usable AV
+               ! state exists here -> decline as out_of_table (D10) rather than
+               ! iterating to max_iter and returning no_converge.
+               ierr = wdm_av_ierr_out_of_table; return
+            end if
+         end if
+
          L_try = L + dL
          if (have_lo .and. have_hi) then
             if (L_try <= L_lo .or. L_try >= L_hi) L_try = 0.5d0*(L_lo + L_hi)
@@ -335,6 +398,7 @@ contains
             L_try = 0.5d0*(L + L_try)
             xi_try = xi
          end do
+         prev_resid = resid
          L = L_try
          V = V_try
          xi = xi_try; chi = chi_try
@@ -376,7 +440,7 @@ contains
       real(dp), intent(out) :: chi
       integer, intent(out) :: ierr
       type(eos_wdm_av_derivs) :: d
-      real(dp) :: lnr, xi_lo, xi_hi, lnP, g, dxi, fx
+      real(dp) :: lnr, xi_lo, xi_hi, lnP, g, dxi, fx, xi_prev
       integer :: it
       integer, parameter :: maxit = 60
       real(dp), parameter :: step_cap = 4d0
@@ -393,12 +457,19 @@ contains
          call eos_wdm_av_eval_species_real(tbl, A_sp, xi, tau, d, ierr)
          if (ierr /= 0) return
          fx = d% fx
+         ! NaN/Inf nodal data: the containing cell has invalid (Skye-failed)
+         ! corners, so this species' state is outside the usable table.  Report
+         ! out_of_table (D10) rather than burning the iteration budget and
+         ! returning a spurious no_converge.
+         if (is_bad(fx) .or. is_bad(d% fxx)) then
+            ierr = wdm_av_ierr_out_of_table; return
+         end if
          if (fx <= 0d0) then
-            ierr = wdm_av_ierr_bad_domain; return
+            ierr = wdm_av_ierr_bad_domain; return      ! P_i <= 0
          end if
          chi = 1d0 + d% fxx/fx
          if (chi <= 0d0) then
-            ierr = wdm_av_ierr_bad_domain; return
+            ierr = wdm_av_ierr_bad_domain; return      ! dP_i/drho_i <= 0 (non-monotone)
          end if
          lnP = xi + log(fx)                 ! ln(rho_i f_xi) = ln P_i
          g = lnP - Ltar
@@ -408,9 +479,18 @@ contains
          dxi = -g/chi
          if (dxi > step_cap) dxi = step_cap
          if (dxi < -step_cap) dxi = -step_cap
+         xi_prev = xi
          xi = xi + dxi
          if (xi < xi_lo) xi = xi_lo
          if (xi > xi_hi) xi = xi_hi
+         ! pinned at a table edge with the Newton step pointing further out: the
+         ! requested pressure L is not attainable within this species' tabulated
+         ! density range (e.g. a partial density below/above the table, or the
+         ! flat-pressure pair corner where chi->0).  Decline as out_of_table (D10)
+         ! instead of iterating to maxit and returning no_converge.
+         if (xi == xi_prev) then
+            ierr = wdm_av_ierr_out_of_table; return
+         end if
       end do
       ! not converged in the inner loop: report as non-convergence for this point
       ierr = wdm_av_ierr_no_converge
