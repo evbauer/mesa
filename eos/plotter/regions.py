@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import sys
+
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -18,7 +20,14 @@ def parse(fname):
     return data, Yran, Xran
 
 
-with open("eos_plotter.dat") as f:
+# Optional command-line args keep `make plot` (no args) working unchanged while
+# letting callers reuse this script for other data files / outputs / titles:
+#   regions.py [datafile] [output.png] [title]
+datafile = sys.argv[1] if len(sys.argv) > 1 else "eos_plotter.dat"
+outfile = sys.argv[2] if len(sys.argv) > 2 else "eos_regions.png"
+title_override = sys.argv[3] if len(sys.argv) > 3 else None
+
+with open(datafile) as f:
     title = f.readline().strip()
     xlabel = f.readline().strip()
     ylabel = f.readline().strip()
@@ -27,7 +36,7 @@ with open("eos_plotter.dat") as f:
 xlabel = r"$\log(\rho/{\rm g\,cm^{-3}})$"
 ylabel = r"$\log(T/{\rm K})$"
 
-eosDT, Yran, Xran = parse("eos_plotter.dat")
+eosDT, Yran, Xran = parse(datafile)
 
 apjcolwidth = 3.38
 # set up plot and labels
@@ -41,6 +50,9 @@ ax.text(4.0, 2.3, "no coverage", fontsize="small")
 ## for Z = 1 plot
 # title = r'MESA EOS Regions ($X=0.0$, $Z=1.0$)'
 # ax.text(4.8,2.3,'no coverage',fontsize='small')
+
+if title_override is not None:
+    title = title_override
 
 ax.set_title(title)
 ax.set_xlabel(xlabel)
@@ -82,6 +94,6 @@ cax.ax.set_yticklabels(
 
 # save figure
 # fig.savefig('eos_regions.pdf')
-fig.savefig("eos_regions.png", dpi=300)
+fig.savefig(outfile, dpi=300)
 
 # plt.show()

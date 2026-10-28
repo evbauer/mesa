@@ -5,6 +5,7 @@ program eos_plotter
    use chem_def
    use chem_lib
    use const_lib, only: const_init
+   use const_def, only: crad, ln10
    use math_lib
    use num_lib, only : dfridr
    use utils_lib, only: set_nan
@@ -67,7 +68,10 @@ program eos_plotter
 
    ierr = 0
 
-   my_mesa_dir = '../..'
+   ! empty string => const_init uses the MESA_DIR environment variable, so the
+   ! plotter can be run from any working directory (e.g. a scratch copy with its
+   ! own inlist_plotter).  '../..' (the plotter dir) still works via MESA_DIR.
+   my_mesa_dir = ''
    call const_init(my_mesa_dir,ierr)
    if (ierr /= 0 .and. .not. ignore_ierr) then
       write(*,*) 'const_init failed'
