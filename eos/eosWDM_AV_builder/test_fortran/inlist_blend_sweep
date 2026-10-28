@@ -1,0 +1,19 @@
+&eos
+   ! Enable the WDM_AV (additive-volume) component of the eosDT cascade.
+   use_WDM_AV = .true.
+
+   ! Which per-isotope table set to combine: 'skye' or 'helm'.
+   ! blend_sweep overrides this from its command-line argument, so this value is
+   ! only the fallback when the program is run with no argument.
+   WDM_AV_table_set = 'skye'
+
+   ! Ideal mixing entropy model (ions + electrons, AV partial volumes; D8).
+   WDM_AV_mixing_entropy = 'ions_electrons'
+
+   ! Everything else at its default.  In particular:
+   !   okay_to_convert_ierr_to_skip = .true. (default): a WDM_AV decline / solver
+   !   failure becomes a cascade "skip", so the next level (Skye, FreeEOS, HELM,
+   !   ideal, ...) covers the point.  This is the full-cascade behaviour the
+   !   blend-edge sweeps are meant to probe.  WDM_AV_debug stays .false. so the
+   !   blend box, not the debug ierr path, controls where WDM_AV declines.
+/

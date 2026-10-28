@@ -31,7 +31,7 @@ force_wdm_mods:
 $(BUILD_DIR_MODULE)/depend: force_wdm_mods
 
 # copy the built executable here as ./test_interp so it can be run directly
-all: ./test_interp ./test_mix ./mix_vs_reference
+all: ./test_interp ./test_mix ./mix_vs_reference ./blend_sweep
 ./test_interp: $(OBJ_OUT)
 	cp $(OBJ_OUT) ./test_interp
 
@@ -49,6 +49,13 @@ all: ./test_interp ./test_mix ./mix_vs_reference
 	$(FCOMPILE) mix_vs_reference.f90 -o mix_vs_reference.o
 	$(EXECUTABLE) -o ./mix_vs_reference mix_vs_reference.o $(LIB_DEP_ARGS)
 
+# blend_sweep: blend-edge sweeps of the integrated WDM_AV component through the
+# FULL cascade (eosDT_get).  Built the same way as mix_vs_reference; uses only
+# the public eos_lib/eos_def API.
+./blend_sweep: blend_sweep.f90 force_wdm_mods
+	$(FCOMPILE) blend_sweep.f90 -o blend_sweep.o
+	$(EXECUTABLE) -o ./blend_sweep blend_sweep.o $(LIB_DEP_ARGS)
+
 # build and run the interpolation test
 test: ./test_interp
 	./test_interp
@@ -58,4 +65,7 @@ test2: ./test_mix
 
 test3: ./mix_vs_reference
 	./mix_vs_reference skye
+
+test4: ./blend_sweep
+	./blend_sweep skye
 
