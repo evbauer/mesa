@@ -296,6 +296,10 @@ queries without changing installed source tables or EOS selection. Whole-cell
 numerical Bernstein/reference-split bounds establish positive Cv and P_rho in
 the declared full-own-use cells, subject to their numerical guard conventions;
 they do not establish source accuracy or blend/whole-domain stability.
+The035extension certifies both quantities on all5069new shifted full-own-use
+cells and on all2430clean cells supported only by the explicit3.1floor.
+Negative witnesses remain outside the full-own-use predicate; no global
+extension or actual EOS-fraction inference follows from those counts.
 
 Double-knot quintic C3 source fits have structural null modes; a declared
 integrated normal-fourth roughness selector removes that ambiguity. It improves

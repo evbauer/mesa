@@ -97,6 +97,8 @@ Generated caches must live in experiment-owned, ignored output directories.
   and soft second responses; exact retained nodes do not ensure better holdouts.
 - `c3_gauge_control/`: known artificial a+bT offsets reveal smoother selector/
   scaling/representation sensitivity; analytic removal is not source gauge inference.
+- `edge_bounds/`: guarded whole-cell signs for newly supported shifted-native
+  cells, including explicit3.1-only cells; geometry is not actual EOS fraction.
 - `composition_control/`: bounded archived-X holdout, gauge checks, and explicit
   audited endpoint metadata; no runtime composition support.
 - `mesa_probe/`, `active_faces.py`, `legacy_face_control.py`, `coverage_gap.py`:
