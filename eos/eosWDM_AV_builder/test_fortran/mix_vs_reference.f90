@@ -21,7 +21,7 @@ program mix_vs_reference
 
    ! Mixture-level validation of the integrated WDM_AV eosDT component.
    !
-   ! For each of the five reference mixtures (same compositions as
+   ! For each of the eleven reference mixtures (same compositions as
    ! make_mesa_tables), this program reads the composition and grid from the
    ! reference file header, then at every reference grid node calls the
    ! integrated path
@@ -63,12 +63,15 @@ program mix_vs_reference
       '/Users/bauer39/work/mesas/evbauer/mesa/data/eosWDM_AV_data'
 
    integer, parameter :: max_species = 8
-   integer, parameter :: n_mix = 5
+   integer, parameter :: n_mix = 11
 
-   ! the five reference mixtures (file stems, shared by both reference sets)
+   ! the reference mixtures (file stems, shared by both reference sets); cases
+   ! 1-5 WP4, cases 6-11 WP4c (asymmetric binaries and ternaries)
    character(len=32) :: mix_files(n_mix) = [character(len=32) :: &
       'mix_c12_o16', 'mix_o16_ne20_mg24', 'mix_he4_c12', 'mix_h1_he4', &
-      'mix_c12_o16_ne22']
+      'mix_c12_o16_ne22', &
+      'mix_c12_o16_90_10', 'mix_c12_o16_99_01', 'mix_he4_c12_99_01', &
+      'mix_he4_c12_10_90', 'mix_c12_o16_ne20', 'mix_he4_c12_o16']
 
    integer :: handle, ierr, i, nargs
    type (EoS_General_Info), pointer :: rq

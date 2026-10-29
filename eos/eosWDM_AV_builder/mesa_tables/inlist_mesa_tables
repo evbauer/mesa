@@ -38,4 +38,15 @@
    ! output root; blank => $(MESA_DIR)/data/eosWDM_AV_data
    output_root = ''
 
+   ! run-selection controls (WP4c). These default (in code and here) to a full
+   ! regeneration of all 11 mixtures and the isotope source tables. To regenerate
+   ! only a sub-range of mixtures without touching the isotope tables or the other
+   ! mixtures (as was done for the WP4c run of mixtures 6-11), set e.g.
+   !   skip_isotope_tables = .true.
+   !   mix_first = 6
+   !   mix_last  = 11
+   skip_isotope_tables = .false.
+   mix_first = 1
+   mix_last  = 11
+
 /

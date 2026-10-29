@@ -51,10 +51,16 @@ program make_mesa_tables
    integer :: n_iso
    character(len=32) :: iso_names(max_iso)
    character(len=256) :: output_root
+   ! run-selection controls: skip the (unchanged) isotope source tables and/or
+   ! restrict the mixture loop to a sub-range, so a run can regenerate only the
+   ! new mixtures without overwriting existing isotope / mixture files.
+   logical :: skip_isotope_tables
+   integer :: mix_first, mix_last
 
    namelist /table_controls/ &
       logRho_min, logRho_max, logT_min, logT_max, &
-      pts_per_decade, pts_per_decade_mix, n_iso, iso_names, output_root
+      pts_per_decade, pts_per_decade_mix, n_iso, iso_names, output_root, &
+      skip_isotope_tables, mix_first, mix_last
 
    ! eos handle and runtime options
    integer :: handle
@@ -76,8 +82,8 @@ program make_mesa_tables
 
    integer :: i
 
-   ! mixture definitions (hardcoded per WP4)
-   integer, parameter :: n_mix = 5
+   ! mixture definitions (hardcoded per WP4; cases 1-5 WP4, cases 6-11 WP4c)
+   integer, parameter :: n_mix = 11
 
    include 'formats'
 
@@ -90,6 +96,9 @@ program make_mesa_tables
    pts_per_decade = 20
    pts_per_decade_mix = 10
    output_root = ''
+   skip_isotope_tables = .false.
+   mix_first = 1
+   mix_last = n_mix
    iso_names = ''
    n_iso = 7
    iso_names(1) = 'h1'
@@ -157,15 +166,20 @@ program make_mesa_tables
    write(*,*)
 
    ! ------------------------------------------------------------------
-   ! pure-isotope source tables
-   do i = 1, n_iso
-      call write_isotope_table(i_eos_HELM, iso_names(i), dir_helm)
-      call write_isotope_table(i_eos_Skye, iso_names(i), dir_skye)
-   end do
+   ! pure-isotope source tables (skipped when regenerating only mixtures)
+   if (skip_isotope_tables) then
+      write(*,'(a)') ' skip_isotope_tables=T: leaving existing isotope source tables untouched.'
+   else
+      do i = 1, n_iso
+         call write_isotope_table(i_eos_HELM, iso_names(i), dir_helm)
+         call write_isotope_table(i_eos_Skye, iso_names(i), dir_skye)
+      end do
+   end if
 
    ! ------------------------------------------------------------------
-   ! reference mixture tables
-   do i = 1, n_mix
+   ! reference mixture tables (mix_first..mix_last; default 1..n_mix)
+   write(*,'(a,i0,a,i0)') ' generating reference mixtures ', mix_first, ' .. ', mix_last
+   do i = mix_first, mix_last
       call write_mixture_table(i_eos_Skye, i, dir_mix_skye)
       call write_mixture_table(i_eos_HELM, i, dir_mix_helm)
    end do
@@ -587,6 +601,44 @@ contains
          names(3) = 'ne22'; fracs(3) = 0.02d0
          fname = 'mix_c12_o16_ne22'
          comp_str = 'c12=0.49 o16=0.49 ne22=0.02'
+      case (6)
+         nsp = 2
+         names(1) = 'c12';  fracs(1) = 0.90d0
+         names(2) = 'o16';  fracs(2) = 0.10d0
+         fname = 'mix_c12_o16_90_10'
+         comp_str = 'c12=0.90 o16=0.10'
+      case (7)
+         nsp = 2
+         names(1) = 'c12';  fracs(1) = 0.99d0
+         names(2) = 'o16';  fracs(2) = 0.01d0
+         fname = 'mix_c12_o16_99_01'
+         comp_str = 'c12=0.99 o16=0.01'
+      case (8)
+         nsp = 2
+         names(1) = 'he4';  fracs(1) = 0.99d0
+         names(2) = 'c12';  fracs(2) = 0.01d0
+         fname = 'mix_he4_c12_99_01'
+         comp_str = 'he4=0.99 c12=0.01'
+      case (9)
+         nsp = 2
+         names(1) = 'he4';  fracs(1) = 0.10d0
+         names(2) = 'c12';  fracs(2) = 0.90d0
+         fname = 'mix_he4_c12_10_90'
+         comp_str = 'he4=0.10 c12=0.90'
+      case (10)
+         nsp = 3
+         names(1) = 'c12';  fracs(1) = 0.45d0
+         names(2) = 'o16';  fracs(2) = 0.45d0
+         names(3) = 'ne20'; fracs(3) = 0.10d0
+         fname = 'mix_c12_o16_ne20'
+         comp_str = 'c12=0.45 o16=0.45 ne20=0.10'
+      case (11)
+         nsp = 3
+         names(1) = 'he4';  fracs(1) = 0.20d0
+         names(2) = 'c12';  fracs(2) = 0.40d0
+         names(3) = 'o16';  fracs(3) = 0.40d0
+         fname = 'mix_he4_c12_o16'
+         comp_str = 'he4=0.20 c12=0.40 o16=0.40'
       case default
          nsp = 0
          fname = 'mix_unknown'

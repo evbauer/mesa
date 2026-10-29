@@ -3,7 +3,7 @@
 Compares the additive-volume (AV) WDM_AV mixture, evaluated through the
 integrated eosDT path (``eosDT_get_component(handle, i_eos_WDM_AV, ...)`` in
 ``test_fortran/mix_vs_reference.f90``), against MESA's Skye and HELM run
-directly on the same five reference mixtures, over the (logRho, logT) plane.
+directly on the same eleven reference mixtures, over the (logRho, logT) plane.
 
 Two independent physics questions (Decision D20, brief WP4b):
 
@@ -86,6 +86,13 @@ MIXTURES = (
     "mix_he4_c12",
     "mix_h1_he4",
     "mix_c12_o16_ne22",
+    # WP4c: asymmetric binaries and ternaries (compositions in the file headers)
+    "mix_c12_o16_90_10",
+    "mix_c12_o16_99_01",
+    "mix_he4_c12_99_01",
+    "mix_he4_c12_10_90",
+    "mix_c12_o16_ne20",
+    "mix_he4_c12_o16",
 )
 
 KBM = C.kerg / C.amu  # k_B / m_u  (erg g^-1 K^-1)
@@ -792,7 +799,7 @@ def markdown_report(summaries: list[dict]) -> str:
         (
             "Relative error of the additive-volume WDM_AV mixture (integrated eosDT "
             "path, `eosDT_get_component(i_eos_WDM_AV)`) against Skye / HELM run "
-            "directly on the same five reference mixtures, at the reference grid "
+            "directly on the same eleven reference mixtures, at the reference grid "
             "nodes where both sides are finite. `S` is the F1-corrected entropy for "
             "Skye (reference minus `Delta s_ideal`); for HELM, radiation is stripped "
             "from WDM_AV's e/s/Cv and gas-only chiRho/chiT come from WDM_AV's "
@@ -804,7 +811,9 @@ def markdown_report(summaries: list[dict]) -> str:
     ]
 
     # (A) aggregate median table, per set and region
-    lines.append("## Aggregate median relative error (median over the 5 mixtures)")
+    lines.append(
+        "## Aggregate median relative error (median over all mixtures of the set)"
+    )
     lines.append("")
     for table_set, tag in (
         ("skye", "(a) Skye"),
@@ -840,6 +849,59 @@ def markdown_report(summaries: list[dict]) -> str:
                 for q in qs:
                     row.append(_fmt(s["quantities"][q][region][stat]))
                 lines.append("| " + " | ".join(row) + " |")
+        lines.append("")
+
+    # (B2) composition trend: target-gap median P and E vs minority mass fraction
+    lines.append("## Composition trend (target gap): error vs minority mass fraction")
+    lines.append("")
+    lines.append(
+        "Target-gap median relative error in P and E for the C/O and He/C series, "
+        "ordered by the minority (smaller) mass fraction X_min. Additive volume is "
+        "exact for a pure species, and the electron-fragmentation error is quadratic "
+        "in the electron-density split, so for small X_min the error is expected to "
+        "fall roughly in proportion to X_min. Compare P/E against "
+        "`validation/fragmentation_estimate.py`."
+    )
+    lines.append("")
+    series = {
+        "C/O (minority O)": [
+            "mix_c12_o16_99_01",
+            "mix_c12_o16_90_10",
+            "mix_c12_o16",
+        ],
+        "He/C (minority = smaller of He,C)": [
+            "mix_he4_c12_99_01",
+            "mix_he4_c12_10_90",
+            "mix_he4_c12",
+        ],
+    }
+    by_key = {(s["table_set"], s["mixture"]): s for s in summaries}
+    for sname, stems in series.items():
+        lines.append(f"### {sname}")
+        lines.append("")
+        lines.append("| mixture | X_min | skye P | skye E | helm P | helm E |")
+        lines.append("|" + "---|" * 6)
+        for stem in stems:
+            ssk = by_key.get(("skye", stem))
+            she = by_key.get(("helm", stem))
+            ref = ssk or she
+            if ref is None:
+                continue
+            xmin = min(ref["composition"].values())
+            row = [stem, f"{xmin:.2f}"]
+            row.append(
+                _fmt(ssk["quantities"]["P"]["target"]["median"]) if ssk else "  -  "
+            )
+            row.append(
+                _fmt(ssk["quantities"]["E"]["target"]["median"]) if ssk else "  -  "
+            )
+            row.append(
+                _fmt(she["quantities"]["P"]["target"]["median"]) if she else "  -  "
+            )
+            row.append(
+                _fmt(she["quantities"]["E"]["target"]["median"]) if she else "  -  "
+            )
+            lines.append("| " + " | ".join(row) + " |")
         lines.append("")
 
     # (C) reference corrections: primary vs alternative evidence

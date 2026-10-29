@@ -86,25 +86,78 @@ def av_mixture(rho: float, T: float, X: list, Z: list, A: list) -> tuple:
 
 
 MIXES = {
+    # name: (X mass fractions, Z, A); stems match make_mesa_tables / mixtures.py
     "C/O 50/50": ([0.5, 0.5], [6, 8], [12.0, 16.0]),
+    "O/Ne/Mg 55/35/10": ([0.55, 0.35, 0.10], [8, 10, 12], [16.0, 20.0, 24.0]),
     "He/C 50/50": ([0.5, 0.5], [2, 6], [4.0, 12.0]),
+    "H/He 70/30": ([0.70, 0.30], [1, 2], [1.0, 4.0]),
+    "C/O/22Ne 49/49/2": ([0.49, 0.49, 0.02], [6, 8, 10], [12.0, 16.0, 22.0]),
     "C/O 90/10": ([0.9, 0.1], [6, 8], [12.0, 16.0]),
+    "C/O 99/1": ([0.99, 0.01], [6, 8], [12.0, 16.0]),
     "He/C 99/1": ([0.99, 0.01], [2, 6], [4.0, 12.0]),
+    "He/C 10/90": ([0.10, 0.90], [2, 6], [4.0, 12.0]),
     "C/O/Ne 45/45/10": ([0.45, 0.45, 0.1], [6, 8, 10], [12.0, 16.0, 20.0]),
     "He/C/O 20/40/40": ([0.2, 0.4, 0.4], [2, 6, 8], [4.0, 12.0, 16.0]),
 }
 POINTS = [(0.0, 6.0), (1.0, 6.5), (2.0, 6.5), (2.0, 7.0), (3.0, 6.0), (4.0, 7.0)]
 
+# target-gap grid for the --grid median (logRho in [-2,4], logT in [3,7])
+GRID_LOGRHO = np.arange(-2.0, 4.01, 1.0)
+GRID_LOGT = np.arange(3.0, 7.01, 1.0)
+
+
+def grid_medians(X, Z, A):
+    """Median |dP/P| and |de/e| over the target-gap grid (failed points skipped)."""
+    dps, des = [], []
+    for lr in GRID_LOGRHO:
+        for lt in GRID_LOGT:
+            try:
+                dP, dE, _eta, _split = av_mixture(10**lr, 10**lt, X, Z, A)
+            except (ValueError, RuntimeError):
+                continue
+            if np.isfinite(dP) and np.isfinite(dE):
+                dps.append(abs(dP))
+                des.append(abs(dE))
+    if not dps:
+        return None, None, 0
+    return float(np.median(dps)), float(np.median(des)), len(dps)
+
 
 def main() -> None:
-    print(f"{'mixture':16s} {'logRho':>6s} {'logT':>5s} {'eta':>7s} {'dP/P':>10s} {'de/e':>10s}  n_e,i/n_e")
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--grid",
+        action="store_true",
+        help="also report the median |dP/P| and |de/e| over the target-gap grid",
+    )
+    args = ap.parse_args()
+
+    print(
+        f"{'mixture':18s} {'logRho':>6s} {'logT':>5s} {'eta':>7s} "
+        f"{'dP/P':>10s} {'de/e':>10s}  n_e,i/n_e"
+    )
     for name, (X, Z, A) in MIXES.items():
         for lr, lt in POINTS:
             dP, dE, eta, split = av_mixture(10**lr, 10**lt, X, Z, A)
             print(
-                f"{name:16s} {lr:6.1f} {lt:5.1f} {eta:7.2f} {dP:10.2e} {dE:10.2e}  "
+                f"{name:18s} {lr:6.1f} {lt:5.1f} {eta:7.2f} {dP:10.2e} {dE:10.2e}  "
                 + " ".join(f"{s:.3f}" for s in split)
             )
+
+    if args.grid:
+        print()
+        print(
+            f"{'mixture':18s} {'med|dP/P|':>11s} {'med|de/e|':>11s} "
+            f"{'n_pts':>6s}  (target gap: logRho[-2,4] x logT[3,7], 1-dex grid)"
+        )
+        for name, (X, Z, A) in MIXES.items():
+            mdp, mde, npts = grid_medians(X, Z, A)
+            if mdp is None:
+                print(f"{name:18s} {'-':>11s} {'-':>11s} {0:6d}")
+            else:
+                print(f"{name:18s} {mdp:11.2e} {mde:11.2e} {npts:6d}")
 
 
 if __name__ == "__main__":
