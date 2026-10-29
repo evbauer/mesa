@@ -85,7 +85,7 @@ program blend_sweep
 
    integer :: handle, ierr, imix, icut
    type (EoS_General_Info), pointer :: rq
-   character(len=32) :: table_set
+   character(len=32) :: table_set, rule_arg, set_label
    character(len=512) :: out_dir
    integer :: nargs
 
@@ -102,6 +102,15 @@ program blend_sweep
       call get_command_argument(1, table_set)
    else
       table_set = ''
+   end if
+
+   ! optional second argument: the mixing rule ('pressure' | 'electron_density'),
+   ! overriding WDM_AV_mixing_rule from the inlist; '<set>_ne' output dir for the
+   ! electron-density rule so it does not clobber the additive-volume sweeps.
+   if (nargs >= 2) then
+      call get_command_argument(2, rule_arg)
+   else
+      rule_arg = ''
    end if
 
    ! ------------------------------------------------------------------
@@ -122,13 +131,17 @@ program blend_sweep
    ! force the WDM_AV path on and select the requested table set
    rq% use_WDM_AV = .true.
    if (len_trim(table_set) > 0) rq% WDM_AV_table_set = trim(table_set)
+   if (len_trim(rule_arg) > 0) rq% WDM_AV_mixing_rule = trim(rule_arg)
    table_set = trim(rq% WDM_AV_table_set)
 
-   out_dir = trim(data_root)//'/blend/'//trim(table_set)
+   set_label = trim(table_set)
+   if (trim(rq% WDM_AV_mixing_rule) == 'electron_density') set_label = trim(table_set)//'_ne'
+   out_dir = trim(data_root)//'/blend/'//trim(set_label)
    call execute_command_line('mkdir -p '//trim(out_dir))
 
    write(*,'(a)') '================ blend_sweep ================'
    write(*,'(a,a)') ' table set            ', trim(table_set)
+   write(*,'(a,a)') ' WDM_AV_mixing_rule    ', trim(rq% WDM_AV_mixing_rule)
    write(*,'(a,a)') ' WDM_AV_mixing_entropy ', trim(rq% WDM_AV_mixing_entropy)
    write(*,'(a,a)') ' output dir           ', trim(out_dir)
    write(*,'(a)') ' blend box (logRho any/all/all/any, logT any/all/all/any):'

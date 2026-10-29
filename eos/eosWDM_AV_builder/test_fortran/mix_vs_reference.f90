@@ -75,7 +75,7 @@ program mix_vs_reference
 
    integer :: handle, ierr, i, nargs
    type (EoS_General_Info), pointer :: rq
-   character(len=32) :: table_set
+   character(len=32) :: table_set, rule_arg, set_label
    character(len=512) :: ref_dir, out_dir
 
    ! composition + eos work arrays
@@ -94,6 +94,16 @@ program mix_vs_reference
       call get_command_argument(1, table_set)
    else
       table_set = ''
+   end if
+
+   ! optional second argument: the mixing rule ('pressure' | 'electron_density'),
+   ! overriding WDM_AV_mixing_rule from the inlist.  The electron-density outputs
+   ! are written to a separate '<set>_ne' directory so they do not clobber the
+   ! additive-volume (pressure-rule) outputs.
+   if (nargs >= 2) then
+      call get_command_argument(2, rule_arg)
+   else
+      rule_arg = ''
    end if
 
    ! ------------------------------------------------------------------
@@ -115,6 +125,7 @@ program mix_vs_reference
    ! force the WDM_AV path on and select the requested table set
    rq% use_WDM_AV = .true.
    if (len_trim(table_set) > 0) rq% WDM_AV_table_set = trim(table_set)
+   if (len_trim(rule_arg) > 0) rq% WDM_AV_mixing_rule = trim(rule_arg)
    table_set = trim(rq% WDM_AV_table_set)
 
    ! any set whose name starts with 'skye' (e.g. skye_fd) is compared with the Skye
@@ -127,11 +138,15 @@ program mix_vs_reference
       write(*,'(a)') 'unknown table set "'//trim(table_set)//'" (expected skye or helm)'
       call mesa_error(__FILE__, __LINE__, 'bad table set')
    end if
-   out_dir = trim(data_root)//'/validation_mixtures/'//trim(table_set)
+   ! keep the electron-density outputs apart from the additive-volume ones
+   set_label = trim(table_set)
+   if (trim(rq% WDM_AV_mixing_rule) == 'electron_density') set_label = trim(table_set)//'_ne'
+   out_dir = trim(data_root)//'/validation_mixtures/'//trim(set_label)
    call execute_command_line('mkdir -p '//trim(out_dir))
 
    write(*,'(a)') '================ mix_vs_reference ================'
    write(*,'(a,a)') ' table set            ', trim(table_set)
+   write(*,'(a,a)') ' WDM_AV_mixing_rule    ', trim(rq% WDM_AV_mixing_rule)
    write(*,'(a,a)') ' WDM_AV_mixing_entropy ', trim(rq% WDM_AV_mixing_entropy)
    write(*,'(a,a)') ' reference dir        ', trim(ref_dir)
    write(*,'(a,a)') ' output dir           ', trim(out_dir)
@@ -279,6 +294,7 @@ contains
       write(iou,'(a)') '# WDM_AV mixture validation output, version 1'
       write(iou,'(a,a)') 'component            i_eos_WDM_AV (eosDT_get_component, integrated path)'
       write(iou,'(a,a,a)') 'table_set            "', trim(table_set), '"'
+      write(iou,'(a,a,a)') 'mixing_rule          "', trim(rq% WDM_AV_mixing_rule), '"'
       write(iou,'(a,a,a)') 'mixing_entropy       "', trim(rq% WDM_AV_mixing_entropy), '"'
       write(iou,'(a,a,a)') 'composition          "', trim(comp_str), '"'
       write(iou,'(a)') 'radiation_note       "raw WDM_AV result vector; radiation INCLUDED in '// &

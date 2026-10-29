@@ -65,6 +65,7 @@ program test_mix
    call test_first_law()            ! (f)
    call test_robustness()           ! (g)
    call test_timing()               ! (h)
+   call test_electron_density_rule() ! (i) common-n_e mixing rule (D27)
 
    call eos_wdm_av_free_tables()
    call test_skye_c12()             ! realistic-physics chain
@@ -456,10 +457,11 @@ contains
    ! Richardson central-difference check of every res partial at (rho,T).
    ! Returns worst relative error over the "1st/2nd-derivative" group (wA) and the
    ! "3rd-derivative content" group {Cv,chiT,grad_ad} (wB).
-   subroutine fd_at(nsp, idxs, A, Z, X, rho, T, nsteps, wA, wB)
+   subroutine fd_at(nsp, idxs, A, Z, X, rho, T, nsteps, wA, wB, rule)
       integer, intent(in) :: nsp, idxs(nsp), nsteps
       real(dp), intent(in) :: A(nsp), Z(nsp), X(nsp), rho, T
       real(dp), intent(out) :: wA, wB
+      integer, intent(in), optional :: rule
       type(eos_wdm_av_options) :: opts
       type(eos_wdm_av_state) :: st
       real(dp) :: res0(nv), dd(nv), dt(nv)
@@ -470,6 +472,8 @@ contains
 
       opts% mixing_entropy = 2
       opts% deriv_steps = nsteps
+      opts% mixing_rule = 0
+      if (present(rule)) opts% mixing_rule = rule
 
       call eos_wdm_av_get(opts, T, rho, nsp, idxs, A, Z, X, res0, dd, dt, st, ierr)
 
@@ -698,6 +702,193 @@ contains
       call check_true('timing completed', us_full > 0d0)
       deallocate(idxs, A, Z, X)
    end subroutine test_timing
+
+   !----------------------------------------------------------------------------
+   ! (i) common-electron-density mixing rule (Decision D27).  For fully ionized
+   ! species rho_i = rho * y_e * A_i/Z_i (= n_e A_i m_u/Z_i), no solve.  Proves:
+   !   - the volume identity sum X_i/rho_i = 1/rho holds to round-off;
+   !   - the rule is EXACT for the ideal fully ionized tables (P, e, s to the
+   !     same tolerances as the AV rows), once the mixing entropy is included;
+   !   - the auto_diff mixture P equals the volume-weighted sum of species P_i;
+   !   - every returned partial is FD-consistent (no Newton pass -> interpolant
+   !     FD floor, better than the AV two-step pass);
+   !   - the X_k=1 and split-species identities (for equal Z/A the ne densities
+   !     coincide with the mixture rho, so these match the AV values);
+   !   - the first law.
+   !----------------------------------------------------------------------------
+
+   subroutine test_electron_density_rule()
+      integer :: nsp
+      integer, allocatable :: idxs(:)
+      real(dp), allocatable :: A(:), Z(:), X(:)
+      real(dp) :: wA, wB
+      type(eos_wdm_av_options) :: opts
+      type(eos_wdm_av_state) :: st, st2
+      type(eos_wdm_av_derivs) :: d
+      real(dp) :: res(nv), ddd(nv), ddt(nv), res2(nv)
+      integer :: ierr, idxc, idxs1(1), idxs2(2)
+      real(dp) :: A1(1), Z1(1), X1(1), A2(2), Z2(2), X2(2)
+      real(dp) :: rho, T, xi, tau, Pp, ep, sp_, emax, fa, fb, dsmix_analytic, dsg
+      real(dp) :: rho0, T0, h, worst, r1, r2, t1, t2, e_a, e_b, s_a, s_b
+      real(dp) :: Pm, Tm, rhom, de, rhs, lrh, lth
+      integer :: k
+
+      write(*,'(a)') '--- (i) common-electron-density mixing rule (D27) ---'
+
+      ! ideal-gas exactness, volume identity, auto_diff P = volume-weighted sum
+      call ne_case('pure c12          ', [character(len=8)::'c12'], [1d0])
+      call ne_case('c12/o16 50/50     ', [character(len=8)::'c12','o16'], [50d0,50d0])
+      call ne_case('he4/c12 50/50     ', [character(len=8)::'he4','c12'], [50d0,50d0])
+      call ne_case('h1/he4 70/30      ', [character(len=8)::'h1','he4'], [70d0,30d0])
+      call ne_case('o16/ne20/ne22/mg24', [character(len=8)::'o16','ne20','ne22','mg24'], &
+                   [55d0,33d0,2d0,10d0])
+
+      ! FD verification of every res partial (same machinery as (d), rule=1)
+      call make_comp([character(len=8)::'o16','ne20','ne22','mg24'], &
+                     [55d0,33d0,2d0,10d0], nsp, idxs, A, Z, X)
+      call fd_at(nsp, idxs, A, Z, X, 1.06d0, 1.06d6, 2, wA, wB, rule=1)
+      write(*,'(a,2es11.3)') '  ne-rule worst relerr [1st/2nd-deriv group, 3rd-deriv group] = ', wA, wB
+      call check('  all res partials FD-consistent (ne rule)', max(wA, wB), 1d-5)
+      deallocate(idxs, A, Z, X)
+
+      ! identities (mixing_entropy=1 so only the ion term enters)
+      opts% mixing_entropy = 1
+      opts% mixing_rule = wdm_av_rule_electron_density
+      idxc = iso_idx('c12')
+      rho = 1d2; T = 1d6
+      xi = log(rho); tau = log(T)
+
+      ! X_k = 1 reproduces the pure-species interpolant (rho_1 = rho for ne rule)
+      idxs1(1) = idxc; A1(1) = wdm_av_tables(idxc)% A; Z1(1) = dble(wdm_av_tables(idxc)% Z); X1(1) = 1d0
+      call eos_wdm_av_get(opts, T, rho, 1, idxs1, A1, Z1, X1, res, ddd, ddt, st, ierr)
+      call eos_wdm_av_eval_real(wdm_av_tables(idxc), xi, tau, d, ierr)
+      Pp = rho*d% fx
+      ep = d% f - d% ft
+      sp_ = -d% ft/T
+      emax = 0d0
+      emax = max(emax, relerr(res(i_lnPgas), log(Pp)))
+      emax = max(emax, relerr(exp(res(i_lnE)) - rad_e(rho,T), ep))
+      emax = max(emax, relerr(exp(res(i_lnS)) - rad_s(rho,T), sp_))
+      call check('ne: X_k=1 reproduces pure interpolant', emax, 1d-9)
+
+      ! split c12 into two identical copies: P,e unchanged; s up by the ion mixing term
+      fa = 0.3d0; fb = 0.7d0
+      idxs2 = [idxc, idxc]
+      A2 = wdm_av_tables(idxc)% A; Z2 = dble(wdm_av_tables(idxc)% Z); X2 = [fa, fb]
+      call eos_wdm_av_get(opts, T, rho, 2, idxs2, A2, Z2, X2, res2, ddd, ddt, st2, ierr)
+      call check('ne: split Pgas unchanged', relerr(res2(i_lnPgas), res(i_lnPgas)), 1d-9)
+      call check('ne: split e unchanged', relerr(exp(res2(i_lnE)), exp(res(i_lnE))), 1d-9)
+      dsmix_analytic = -(kerg/(A2(1)*amu))*(fa*log(fa) + fb*log(fb))
+      dsg = (exp(res2(i_lnS)) - rad_s(rho,T)) - (exp(res(i_lnS)) - rad_s(rho,T))
+      call check('ne: split delta_s = -(k/Amu)(a ln a+b ln b)', relerr(dsg, dsmix_analytic), 1d-8)
+
+      ! first law de = T ds + (P/rho^2) drho (ne rule)
+      call make_comp([character(len=8)::'he4','c12'], [50d0,50d0], nsp, idxs, A, Z, X)
+      opts% mixing_entropy = 2
+      opts% mixing_rule = wdm_av_rule_electron_density
+      h = 1d-4
+      worst = 0d0
+      call random_reset()
+      do k = 1, 20
+         rho0 = pow(10d0, rand_range(-2d0, 4d0))
+         T0 = pow(10d0, rand_range(4d0, 7d0))
+         lrh = rand_range(-1d0, 1d0)*h
+         lth = rand_range(-1d0, 1d0)*h
+         r1 = rho0*exp(-lrh); r2 = rho0*exp(lrh)
+         t1 = T0*exp(-lth); t2 = T0*exp(lth)
+         call eos_wdm_av_get(opts, t1, r1, nsp, idxs, A, Z, X, res, ddd, ddt, st, ierr)
+         if (ierr /= 0) cycle
+         e_a = exp(res(i_lnE)); s_a = exp(res(i_lnS))
+         call eos_wdm_av_get(opts, t2, r2, nsp, idxs, A, Z, X, res, ddd, ddt, st, ierr)
+         if (ierr /= 0) cycle
+         e_b = exp(res(i_lnE)); s_b = exp(res(i_lnS))
+         rhom = rho0; Tm = T0
+         call eos_wdm_av_get(opts, Tm, rhom, nsp, idxs, A, Z, X, res, ddd, ddt, st, ierr)
+         Pm = exp(res(i_lnPgas)) + rad_p(Tm)
+         de = e_b - e_a
+         rhs = Tm*(s_b - s_a) + (Pm/(rhom*rhom))*(r2 - r1)
+         worst = max(worst, abs(de - rhs)/max(abs(de), abs(rhs), 1d-99))
+      end do
+      call check('ne: first law residual (O(h^2))', worst, 1d-6)
+      deallocate(idxs, A, Z, X)
+   end subroutine test_electron_density_rule
+
+   ! ideal-gas / identity checks for one mixture under the common-n_e rule
+   subroutine ne_case(label, names, Xin)
+      character(len=*), intent(in) :: label
+      character(len=*), intent(in) :: names(:)
+      real(dp), intent(in) :: Xin(:)
+      type(eos_wdm_av_options) :: opts
+      type(eos_wdm_av_state) :: st
+      real(dp) :: res(nv), ddd(nv), ddt(nv)
+      integer :: nsp, ierr, ip, i
+      integer, allocatable :: idxs(:)
+      real(dp), allocatable :: A(:), Z(:), X(:)
+      real(dp) :: rho, T, Pgas, egas, sex, cv, Pt, Pr, vsum
+      real(dp) :: chr_g, cht_g, cv_g, g3m1, g1_g, gad_g
+      real(dp) :: e_lnP, e_e, e_s, e_cv, e_chr, e_cht, e_g1, e_gad, e_vid, e_pw
+      integer :: nok
+      integer, parameter :: np = 6
+      real(dp) :: lrho(np) = [-2d0,-1d0, 0d0, 0d0, 1d0, 2d0]
+      real(dp) :: lt(np)   = [ 5d0, 6d0, 6d0, 7d0, 7d0, 7d0]
+
+      call make_comp(names, Xin, nsp, idxs, A, Z, X)
+      opts% mixing_entropy = 2
+      opts% mixing_rule = wdm_av_rule_electron_density
+      nok = 0
+      e_lnP=0d0; e_e=0d0; e_s=0d0; e_cv=0d0; e_chr=0d0; e_cht=0d0; e_g1=0d0; e_gad=0d0
+      e_vid=0d0; e_pw=0d0
+      do ip = 1, np
+         rho = pow(10d0, lrho(ip)); T = pow(10d0, lt(ip))
+         Pgas = ideal_Pgas(rho, T, nsp, A, Z, X)
+         egas = ideal_egas(rho, T, nsp, A, Z, X)
+         sex  = sackur_s(rho, T, nsp, A, Z, X)
+         cv   = ideal_cv(nsp, A, Z, X)
+         Pr = rad_p(T); Pt = Pgas + Pr
+
+         call eos_wdm_av_get(opts, T, rho, nsp, idxs, A, Z, X, res, ddd, ddt, st, ierr)
+         if (ierr /= 0) cycle
+         nok = nok + 1
+
+         ! volume identity sum X_i/rho_i = 1/rho (fixed-multiple densities)
+         vsum = 0d0
+         do i = 1, nsp
+            vsum = vsum + X(i)/st% rho_i(i)
+         end do
+         e_vid = max(e_vid, abs(vsum - 1d0/rho)*rho)
+         ! auto_diff mixture P (gas-only lnPgas) vs volume-weighted sum (st% P)
+         e_pw = max(e_pw, relerr(exp(res(i_lnPgas)), st% P))
+
+         chr_g = res(i_chiRho)*Pt/Pgas
+         cht_g = (res(i_chiT)*Pt - 4d0*Pr)/Pgas
+         cv_g  = res(i_Cv) - rad_cv(rho,T)
+         g3m1  = Pgas*cht_g/(rho*T*cv_g)
+         g1_g  = chr_g + cht_g*g3m1
+         gad_g = g3m1/g1_g
+
+         e_lnP = max(e_lnP, relerr(res(i_lnPgas), log(Pgas)))
+         e_e   = max(e_e,   relerr(exp(res(i_lnE)) - rad_e(rho,T), egas))
+         e_s   = max(e_s,   relerr(exp(res(i_lnS)) - rad_s(rho,T), sex))
+         e_cv  = max(e_cv,  relerr(cv_g, cv))
+         e_chr = max(e_chr, relerr(chr_g, 1d0))
+         e_cht = max(e_cht, relerr(cht_g, 1d0))
+         e_g1  = max(e_g1,  relerr(g1_g, 5d0/3d0))
+         e_gad = max(e_gad, relerr(gad_g, 0.4d0))
+      end do
+      write(*,'(a,a,a,i0,a)') '  ', label, '  (', nok, ' points)'
+      call check_true('  points evaluated', nok >= 4)
+      call check('  volume identity sum X_i/rho_i=1/rho', e_vid, 1d-14)
+      call check('  auto_diff P = volume-weighted sum', e_pw, 1d-12)
+      call check('  lnPgas vs analytic (exact ideal)', e_lnP, 1d-6)
+      call check('  e_gas  vs analytic (exact ideal)', e_e, 1d-5)
+      call check('  s_gas  vs Sackur-Tetrode (exact ideal)', e_s, 1d-5)
+      call check('  cV     vs analytic', e_cv, 1d-4)
+      call check('  chiRho vs 1', e_chr, 1d-5)
+      call check('  chiT   vs 1', e_cht, 1d-5)
+      call check('  gamma1 vs 5/3', e_g1, 1d-4)
+      call check('  grad_ad vs 0.4', e_gad, 1d-4)
+      deallocate(idxs, A, Z, X)
+   end subroutine ne_case
 
    !----------------------------------------------------------------------------
    ! Skye c12 realistic-physics chain

@@ -113,7 +113,7 @@ contains
       type(eos_wdm_av_state), intent(out) :: state
       integer, intent(out) :: ierr
 
-      real(dp) :: Xn(nsp), xi(nsp), chi(nsp)
+      real(dp) :: Xn(nsp), xi(nsp), chi(nsp), lnc(nsp)
       real(dp) :: tau, v_target, L, Pstar, resid, Xsum
       integer :: i, n_iter
 
@@ -129,6 +129,7 @@ contains
 
       ierr = 0
       res = 0d0; d_dlnd = 0d0; d_dlnT = 0d0
+      Pstar = 0d0; L = 0d0   ! set by av_solve_real (AV path); unused by the ne path
 
       if (nsp < 1) then
          ierr = wdm_av_ierr_bad_domain
@@ -148,15 +149,45 @@ contains
       tau = log(T)
       v_target = 1d0/rho
 
-      ! -- (1) real AV solve --------------------------------------------------
-      call av_solve_real(opts, tau, v_target, nsp, tbl_idx, A, Z, Xn, L, xi, chi, &
-                         Pstar, n_iter, resid, ierr)
-      state% n_iter = n_iter
-      state% residual = resid
-      state% converged = (ierr == 0)
-      if (ierr /= 0) return
+      ! -- (1) choose the species partial densities rho_i (real) --------------
+      ! The mixing rule decides how the per-species densities are placed; the
+      ! species evaluation, mixing entropy, electron auxiliaries and the pack to
+      ! MESA results below are shared between the two rules.
+      select case (opts% mixing_rule)
 
-      ! validity-mask gate (Skye tables flag unusable cold-corner cells)
+      case (wdm_av_rule_electron_density)
+         ! Common mean electron density (Decision D27).  There is NO solve: for a
+         ! fully ionized plasma the species sit at a common electron density n_e,
+         ! so species i occupies rho_i = n_e A_i m_u / Z_i = rho * y_e * A_i / Z_i
+         ! with y_e = sum_i X_i Z_i/A_i.  These are fixed multiples of rho, c_i rho,
+         ! so (a) sum_i X_i/rho_i = 1/rho identically (no volume equation) and
+         ! (b) every n_e,i = Z_i rho_i/(A_i m_u) equals n_e (the electron mixing
+         ! term vanishes identically).
+         ! NOTE on the formula: rho_i scales as A_i/Z_i (NOT Z_i/A_i).  The share
+         ! of specific volume is V_i/V = X_i rho/rho_i = (X_i Z_i/A_i)/y_e, i.e.
+         ! the species' share of the electrons, as it must be for one common n_e.
+         ! HOOK: the Zbar-dependent generalisation of D27 (partial ionization)
+         ! would replace Z_i by a tabulated Zbar_i(rho_i,T) here and reinstate a
+         ! Newton solve of the structure of av_solve_real (ln n_e in place of
+         ! ln P*); not implemented -- D27 is open and no Zbar tables exist.
+         call ne_densities_real(nsp, A, Z, Xn, rho, xi, lnc, ierr)
+         if (ierr /= 0) return
+         state% n_iter = 0
+         state% residual = 0d0
+         state% converged = .true.
+
+      case default
+         ! -- additive volume at common pressure (the original path) -----------
+         call av_solve_real(opts, tau, v_target, nsp, tbl_idx, A, Z, Xn, L, xi, chi, &
+                            Pstar, n_iter, resid, ierr)
+         state% n_iter = n_iter
+         state% residual = resid
+         state% converged = (ierr == 0)
+         if (ierr /= 0) return
+
+      end select
+
+      ! validity-mask gate (Skye tables flag unusable cold-corner cells); shared
       do i = 1, nsp
          if (.not. cell_usable(wdm_av_tables(tbl_idx(i)), A(i), xi(i), tau)) then
             ierr = wdm_av_ierr_out_of_table
@@ -164,11 +195,20 @@ contains
          end if
       end do
 
-      ! -- fill the converged-state cross-check block (real, F_AV only) -------
-      call fill_state(nsp, tbl_idx, A, Xn, xi, tau, T, rho, Pstar, L, state, ierr)
+      ! -- fill the converged-state block (real) ------------------------------
+      ! For AV this also builds the hand-derived Gibbs cross-check (G_PP,...); for
+      ! the common-n_e rule the pressures are NOT equal, so the Gibbs cross-check
+      ! is meaningless and skipped -- fill_state_ne records the mixture P (the
+      ! volume-weighted sum) and the per-species block only.
+      select case (opts% mixing_rule)
+      case (wdm_av_rule_electron_density)
+         call fill_state_ne(nsp, tbl_idx, A, Xn, xi, tau, T, rho, state, ierr)
+      case default
+         call fill_state(nsp, tbl_idx, A, Xn, xi, tau, T, rho, Pstar, L, state, ierr)
+      end select
       if (ierr /= 0) return
 
-      ! -- (2) auto_diff derivative pass: two flattened Newton steps ----------
+      ! -- (2) auto_diff derivative seeds (shared) ----------------------------
       temp = T
       temp% d1val1 = 1d0
       den = rho
@@ -176,13 +216,26 @@ contains
       tau_ad = log(temp)
       v_ad = 1d0/den
 
-      L_ad = L                      ! seed: constant at converged value
-      do i = 1, nsp
-         xi_ad(i) = xi(i)           ! seed: constant at converged value
-      end do
+      ! -- obtain xi_ad(i) = ln rho_i as auto_diff, by the mixing rule --------
+      select case (opts% mixing_rule)
 
-      call av_newton_pass_ad(opts% deriv_steps, tau_ad, v_ad, nsp, tbl_idx, A, Xn, L_ad, xi_ad, ierr)
-      if (ierr /= 0) return
+      case (wdm_av_rule_electron_density)
+         ! rho_i = c_i rho with constant c_i, so ln rho_i = ln rho + ln c_i and
+         ! d(ln rho_i)/d(ln rho) = 1 exactly: a single auto_diff evaluation, no
+         ! Newton steps (the order-doubling pass of the AV path is not needed).
+         do i = 1, nsp
+            xi_ad(i) = log(den) + lnc(i)
+         end do
+
+      case default
+         L_ad = L                      ! seed: constant at converged value
+         do i = 1, nsp
+            xi_ad(i) = xi(i)           ! seed: constant at converged value
+         end do
+         call av_newton_pass_ad(opts% deriv_steps, tau_ad, v_ad, nsp, tbl_idx, A, Xn, L_ad, xi_ad, ierr)
+         if (ierr /= 0) return
+
+      end select
 
       ! final species free energies and partial densities at the converged xi_ad
       do i = 1, nsp
@@ -227,7 +280,9 @@ contains
       ! fraction block (i_frac : i_frac+num_eos_frac_results-1) at zero here.
 
       ! -- (6) optional debug cross-check (hand-derived Gibbs vs auto_diff) ----
-      if (opts% debug_crosscheck) then
+      ! The Gibbs cross-check assumes a common pressure (G_PP,... are built from
+      ! the equal-pressure solve), so it is only meaningful for the AV rule.
+      if (opts% debug_crosscheck .and. opts% mixing_rule == wdm_av_rule_pressure) then
          call crosscheck_print(F_AV, temp, den, state)
       end if
 
@@ -716,6 +771,110 @@ contains
       state% cp_mix = -T*state% G_TT
 
    end subroutine fill_state
+
+
+   !----------------------------------------------------------------------------
+   ! common-electron-density rule (Decision D27): place each species at the
+   ! density where its electron density equals the common mean n_e.  For full
+   ! ionization rho_i = n_e A_i m_u / Z_i = rho * y_e * A_i / Z_i, with
+   ! y_e = sum_i X_i Z_i/A_i.  Returns xi(i) = ln rho_i and lnc(i) = ln(rho_i/rho)
+   ! (the constant multiplier, for the auto_diff seed).  No solve.
+   !----------------------------------------------------------------------------
+
+   subroutine ne_densities_real(nsp, A, Z, X, rho, xi, lnc, ierr)
+      integer, intent(in) :: nsp
+      real(dp), intent(in) :: A(nsp), Z(nsp), X(nsp), rho
+      real(dp), intent(out) :: xi(nsp), lnc(nsp)
+      integer, intent(out) :: ierr
+      real(dp) :: ye, logrho
+      integer :: i
+
+      ierr = 0
+      ye = sum(X(1:nsp)*Z(1:nsp)/A(1:nsp))
+      if (ye <= 0d0) then
+         ierr = wdm_av_ierr_bad_domain       ! no electrons: no common n_e exists
+         return
+      end if
+      logrho = log(rho)
+      do i = 1, nsp
+         if (Z(i) <= 0d0) then
+            ! a neutral species cannot match a finite n_e at any density
+            ! (the opposite weakness of additive volume; D27 writeup)
+            ierr = wdm_av_ierr_bad_domain
+            return
+         end if
+         lnc(i) = log(ye*A(i)/Z(i))          ! ln(rho_i/rho) = ln(y_e A_i/Z_i)
+         xi(i) = logrho + lnc(i)
+      end do
+   end subroutine ne_densities_real
+
+
+   !----------------------------------------------------------------------------
+   ! fill the converged state for the common-n_e rule.  Unlike fill_state, the
+   ! species pressures are NOT equal, so there is no single P* and the Gibbs-space
+   ! cross-check (G_PP,...) does not apply; those are left zero.  The mixture
+   ! pressure is the volume-weighted sum P = sum_i (V_i/V) P_i, which (because the
+   ! rho_i are fixed multiples of rho) is exactly rho^2 dF_AV/drho -- the same P
+   ! the auto_diff pass returns.
+   !----------------------------------------------------------------------------
+
+   subroutine fill_state_ne(nsp, tbl_idx, A, X, xi, tau, T, rho, state, ierr)
+      integer, intent(in) :: nsp, tbl_idx(nsp)
+      real(dp), intent(in) :: A(nsp), X(nsp), xi(nsp), tau, T, rho
+      type(eos_wdm_av_state), intent(inout) :: state
+      integer, intent(out) :: ierr
+
+      type(eos_wdm_av_derivs) :: d
+      real(dp) :: rho_i, P_i, P_rho, P_T, cV, Pmix, wvol
+      integer :: i
+
+      ierr = 0
+      state% nsp = nsp
+      if (allocated(state% rho_i)) deallocate(state% rho_i, state% xi_i, state% f_i, &
+         state% g_i, state% h_i, state% e_i, state% s_i, state% v_i, &
+         state% P_rho_i, state% P_T_i, state% chi_rho_i)
+      allocate(state% rho_i(nsp), state% xi_i(nsp), state% f_i(nsp), state% g_i(nsp), &
+               state% h_i(nsp), state% e_i(nsp), state% s_i(nsp), state% v_i(nsp), &
+               state% P_rho_i(nsp), state% P_T_i(nsp), state% chi_rho_i(nsp))
+
+      ! cross-check quantities are not defined for this rule
+      state% G_PP = 0d0; state% G_PT = 0d0; state% G_TT = 0d0
+      state% P_rho_mix = 0d0; state% P_T_mix = 0d0
+      state% cv_mix = 0d0; state% cp_mix = 0d0
+
+      Pmix = 0d0
+      do i = 1, nsp
+         call eos_wdm_av_eval_species_real(wdm_av_tables(tbl_idx(i)), A(i), xi(i), tau, d, ierr)
+         if (ierr /= 0) return
+         rho_i = exp(xi(i))
+         if (d% fx <= 0d0) then
+            ierr = wdm_av_ierr_bad_domain; return      ! P_i <= 0
+         end if
+         P_i = rho_i*d% fx                         ! P_i = rho_i f_xi
+         P_rho = d% fx + d% fxx                     ! dP_i/drho_i
+         P_T = rho_i*d% fxt/T                        ! dP_i/dT at fixed rho_i
+         cV = (d% ft - d% ftt)/T
+
+         state% rho_i(i) = rho_i
+         state% xi_i(i) = xi(i)
+         state% f_i(i) = d% f
+         state% e_i(i) = d% f - d% ft               ! e = f - f_tau
+         state% s_i(i) = -d% ft/T
+         state% v_i(i) = 1d0/rho_i
+         state% P_rho_i(i) = P_rho
+         state% P_T_i(i) = P_T
+         state% chi_rho_i(i) = 1d0 + d% fxx/d% fx
+         state% g_i(i) = d% f + P_i/rho_i           ! each species at its own P_i
+         state% h_i(i) = state% e_i(i) + P_i/rho_i
+
+         wvol = X(i)*rho/rho_i                       ! V_i/V (sum_i wvol = 1)
+         Pmix = Pmix + wvol*P_i
+      end do
+
+      state% P = Pmix
+      state% lnP = log(Pmix)
+
+   end subroutine fill_state_ne
 
 
    !----------------------------------------------------------------------------

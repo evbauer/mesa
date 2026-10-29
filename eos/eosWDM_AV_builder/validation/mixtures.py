@@ -66,11 +66,17 @@ REF_DIRS = {
     "helm": DATA_ROOT / "reference_helm_mixtures",
     "skye_fd": DATA_ROOT
     / "reference_skye_mixtures",  # P,E,F-only tables, FD 2nd derivs
+    # common-electron-density mixing rule (Decision D27); same references, the
+    # WDM_AV output comes from the '<set>_ne' directories (mix_vs_reference arg2).
+    "skye_ne": DATA_ROOT / "reference_skye_mixtures",
+    "helm_ne": DATA_ROOT / "reference_helm_mixtures",
 }
 OUT_DIRS = {
     "skye": DATA_ROOT / "validation_mixtures" / "skye",
     "helm": DATA_ROOT / "validation_mixtures" / "helm",
     "skye_fd": DATA_ROOT / "validation_mixtures" / "skye_fd",
+    "skye_ne": DATA_ROOT / "validation_mixtures" / "skye_ne",
+    "helm_ne": DATA_ROOT / "validation_mixtures" / "helm_ne",
 }
 SOURCE_DIR = DATA_ROOT / "source_skye"  # atomic weights (identical for helm)
 
@@ -791,6 +797,106 @@ def _agg_median(summaries, table_set, q, region) -> float | None:
     return float(np.median(vals)) if vals else None
 
 
+def _mix_median(summaries, table_set, mixture, q, region):
+    by = {(s["table_set"], s["mixture"]): s for s in summaries}
+    s = by.get((table_set, mixture))
+    if s is None:
+        return None
+    return s["quantities"][q][region]["median"]
+
+
+def two_rule_section(summaries: list[dict]) -> list[str]:
+    """Additive volume (pressure rule) vs common-electron-density rule (D27).
+
+    Emits, for each (base, ne) set pair present, the aggregate median side by
+    side and the six mixtures where additive volume is worst (ranked by the
+    pressure-rule target-gap P median), both rules shown.
+    """
+    qs = ("P", "E", "S", "chiT", "Cv")
+    pairs = [("skye", "skye_ne", "Skye"), ("helm", "helm_ne", "HELM")]
+    sets_present = {s["table_set"] for s in summaries}
+    lines = ["## Two mixing rules: additive volume vs common electron density (D27)", ""]
+    lines.append(
+        "Median relative error against the same reference, additive volume "
+        "(`pressure`) vs the common-electron-density rule (`electron_density`), "
+        "for the two regions that matter. Lower is better; the common-n_e rule is "
+        "expected to help against Skye (linear mixing reference) and to leave the "
+        "HELM mean-ion Coulomb difference essentially unchanged."
+    )
+    lines.append("")
+    for base, ne, tag in pairs:
+        if base not in sets_present or ne not in sets_present:
+            continue
+        for region in ("target", "skye_valid"):
+            lines.append(f"### {tag}: {_REGION_DESC[region]}")
+            lines.append("")
+            lines.append("| rule | " + " | ".join(qs) + " |")
+            lines.append("|" + "---|" * (1 + len(qs)))
+            for ts, rlabel in ((base, "additive volume"), (ne, "common n_e")):
+                row = [rlabel]
+                for q in qs:
+                    row.append(_fmt(_agg_median(summaries, ts, q, region)))
+                lines.append("| " + " | ".join(row) + " |")
+            lines.append("")
+        # six worst mixtures (by pressure-rule target-gap P median)
+        base_s = [s for s in summaries if s["table_set"] == base]
+        ranked = sorted(
+            base_s,
+            key=lambda s: (s["quantities"]["P"]["target"]["median"] or 0.0),
+            reverse=True,
+        )[:6]
+        lines.append(
+            f"### {tag}: six worst mixtures (ranked by additive-volume target-gap "
+            "P median), both rules"
+        )
+        lines.append("")
+        lines.append(
+            "| mixture | region | rule | " + " | ".join(qs) + " |"
+        )
+        lines.append("|" + "---|" * (3 + len(qs)))
+        for s in ranked:
+            mix = s["mixture"]
+            for region in ("target", "skye_valid"):
+                for ts, rlabel in ((base, "AV"), (ne, "n_e")):
+                    row = [mix, region, rlabel]
+                    for q in qs:
+                        row.append(_fmt(_mix_median(summaries, ts, mix, q, region)))
+                    lines.append("| " + " | ".join(row) + " |")
+        lines.append("")
+
+    # composition series for both rules (C/O and He/C), target-gap P and E
+    lines.append("### Composition series, both rules (target-gap median P and E)")
+    lines.append("")
+    series = {
+        "C/O (minority O)": ["mix_c12_o16_99_01", "mix_c12_o16_90_10", "mix_c12_o16"],
+        "He/C": ["mix_he4_c12_99_01", "mix_he4_c12_10_90", "mix_he4_c12"],
+    }
+    by_key = {(s["table_set"], s["mixture"]): s for s in summaries}
+    for sname, stems in series.items():
+        lines.append(f"#### {sname}")
+        lines.append("")
+        lines.append(
+            "| mixture | X_min | skye P (AV) | skye P (n_e) | skye E (AV) | "
+            "skye E (n_e) | helm P (AV) | helm P (n_e) |"
+        )
+        lines.append("|" + "---|" * 8)
+        for stem in stems:
+            ref = by_key.get(("skye", stem)) or by_key.get(("helm", stem))
+            if ref is None:
+                continue
+            xmin = min(ref["composition"].values())
+            row = [stem, f"{xmin:.2f}"]
+            row.append(_fmt(_mix_median(summaries, "skye", stem, "P", "target")))
+            row.append(_fmt(_mix_median(summaries, "skye_ne", stem, "P", "target")))
+            row.append(_fmt(_mix_median(summaries, "skye", stem, "E", "target")))
+            row.append(_fmt(_mix_median(summaries, "skye_ne", stem, "E", "target")))
+            row.append(_fmt(_mix_median(summaries, "helm", stem, "P", "target")))
+            row.append(_fmt(_mix_median(summaries, "helm_ne", stem, "P", "target")))
+            lines.append("| " + " | ".join(row) + " |")
+        lines.append("")
+    return lines
+
+
 def markdown_report(summaries: list[dict]) -> str:
     qs = ("P", "E", "S", "chiT", "Cv", "grad_ad")
     lines = [
@@ -822,6 +928,8 @@ def markdown_report(summaries: list[dict]) -> str:
             "skye_fd",
             "(c) Skye reference, tables built from P, E, F only (FD second derivatives)",
         ),
+        ("skye_ne", "(d) Skye, common-electron-density rule (D27)"),
+        ("helm_ne", "(e) HELM, common-electron-density rule (D27)"),
     ):
         present = [s for s in summaries if s["table_set"] == table_set]
         if not present:
@@ -836,6 +944,9 @@ def markdown_report(summaries: list[dict]) -> str:
                 row.append(_fmt(_agg_median(summaries, table_set, q, region)))
             lines.append("| " + " | ".join(row) + " |")
         lines.append("")
+
+    # (A2) two-rule comparison: additive volume (pressure) vs common-n_e (D27)
+    lines += two_rule_section(summaries)
 
     # (B) per-mixture detail (median / p99 / max), target + skye_valid
     for region in ("target", "skye_valid"):
@@ -1028,7 +1139,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--sets",
         nargs="+",
         default=["skye", "helm", "skye_fd"],
-        choices=["skye", "helm", "skye_fd"],
+        choices=["skye", "helm", "skye_fd", "skye_ne", "helm_ne"],
     )
     p.add_argument("--mixtures", nargs="+", default=list(MIXTURES))
     p.add_argument("--figdir", default=str(DEFAULT_FIGDIR))
@@ -1041,6 +1152,73 @@ def build_parser() -> argparse.ArgumentParser:
         "the ion-offset bug is fixed upstream, so the raw Skye E is additive)",
     )
     return p
+
+
+def plot_rule_diff(base: str, ne: str, mixture: str, figdir: Path):
+    """Difference-of-rules map: log10|err(n_e)| - log10|err(AV)| per quantity.
+
+    Blue (negative) => the common-electron-density rule is more accurate than
+    additive volume at that node; red => worse. Same reference for both rules.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import TwoSlopeNorm
+
+    ref = read_table(REF_DIRS[base] / f"{mixture}.txt", len(_REF_NAMES))
+    wa = read_table(OUT_DIRS[base] / f"{mixture}.txt", len(_WDM_NAMES))
+    wn = read_table(OUT_DIRS[ne] / f"{mixture}.txt", len(_WDM_NAMES))
+    hdr = read_header(OUT_DIRS[ne] / f"{mixture}.txt")
+    comp = parse_composition(hdr["composition"])
+    logrho = _col(wn, WDM_COLS, "logRho")
+    logt = _col(wn, WDM_COLS, "logT")
+
+    both_a = (_col(wa, WDM_COLS, "flag") == 0.0) & np.isfinite(
+        _col(ref, REF_COLS, "lnPgas")
+    )
+    both_n = (_col(wn, WDM_COLS, "flag") == 0.0) & np.isfinite(
+        _col(ref, REF_COLS, "lnPgas")
+    )
+    both = both_a & both_n
+
+    cqa = comparison_quantities(base, ref, wa, comp, logrho, logt)["quantities"]
+    cqn = comparison_quantities(ne, ref, wn, comp, logrho, logt)["quantities"]
+
+    nR = int(np.sum(logt == logt[0]))
+    nT = logt.size // nR
+    LR = logrho.reshape(nT, nR)
+    LT = logt.reshape(nT, nR)
+    norm = TwoSlopeNorm(vmin=-3.0, vcenter=0.0, vmax=3.0)
+    cmap = plt.get_cmap("coolwarm_r").copy()  # blue = ne better (negative)
+    cmap.set_bad("white")
+
+    figdir.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(2, 3, figsize=(13, 7))
+    axes = axes.ravel()
+    im = None
+    for ax, q in zip(axes, ("P", "E", "S", "chiT", "Cv", "grad_ad")):
+        ea, oka = error_array(cqa[q]["w"], cqa[q]["r"], cqa[q]["kind"], both)
+        en, okn = error_array(cqn[q]["w"], cqn[q]["r"], cqn[q]["kind"], both)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            diff = np.log10(en) - np.log10(ea)
+        diff = np.ma.masked_invalid(diff.reshape(nT, nR))
+        ax.set_facecolor("white")
+        im = ax.pcolormesh(LR, LT, diff, shading="auto", cmap=cmap, norm=norm)
+        ax.axhline(6.5, color="k", lw=0.6, ls="--", alpha=0.5)
+        ax.axvline(3.7, color="k", lw=0.6, ls="--", alpha=0.5)
+        ax.plot([-2, 4, 4, -2, -2], [3, 3, 7, 7, 3], color="k", lw=0.8, alpha=0.7)
+        ax.set_title(f"{q}: log10|err(n_e)| - log10|err(AV)|", fontsize=9)
+        ax.set_xlabel("logRho")
+        ax.set_ylabel("logT")
+    fig.suptitle(f"{base}: rule difference (blue = common-n_e better): {mixture}")
+    fig.tight_layout(rect=(0, 0, 0.92, 1))
+    cbar = fig.colorbar(im, ax=axes.tolist(), extend="both", fraction=0.046, pad=0.02)
+    cbar.set_label("log10 error ratio (n_e / AV); negative = n_e better")
+    path = figdir / f"rulediff_{base}_{mixture}.png"
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+    return path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1071,6 +1249,17 @@ def main(argv: list[str] | None = None) -> int:
             )
     paths = write_reports(summaries, Path(args.resultsdir))
     print("wrote", paths["json"], paths["csv"], paths["md"])
+
+    # difference-of-rules maps (skye set) for the key mixtures, when both the
+    # additive-volume and common-n_e Skye outputs are present
+    if "skye" in args.sets and "skye_ne" in args.sets:
+        for mixture in ("mix_c12_o16", "mix_he4_c12", "mix_he4_c12_o16"):
+            if mixture in args.mixtures:
+                try:
+                    p = plot_rule_diff("skye", "skye_ne", mixture, figdir)
+                    print("wrote rule-diff map", p)
+                except (FileNotFoundError, ValueError) as e:
+                    print(f"  (skip rule-diff {mixture}: {e})")
     return 0
 
 

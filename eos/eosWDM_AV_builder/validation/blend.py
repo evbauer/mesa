@@ -58,7 +58,7 @@ DEFAULT_FIGDIR = Path(
 )
 DEFAULT_RESULTSDIR = _HERE / "results"
 
-SETS = ("skye", "helm")
+SETS = ("skye", "helm", "skye_ne", "helm_ne")
 MIXTURES = ("c12_o16", "c12")
 COMP = {"c12_o16": {"c12": 0.5, "o16": 0.5}, "c12": {"c12": 1.0}}
 CUTS = (
