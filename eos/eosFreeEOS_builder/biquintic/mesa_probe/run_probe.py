@@ -25,7 +25,10 @@ def main():
     parser.add_argument('--sdk-dir', type=Path, default=WORKSPACE / 'mesasdk-x86_64-linux-26.6.1')
     parser.add_argument('--inlist', type=Path, default=PROBE / 'inlist_probe')
     parser.add_argument('--massfile', type=Path, default=WORKSPACE / 'mesa/eos/eosFreeEOS_builder/mass_frac_solar.txt')
+    parser.add_argument('--output', type=Path, default=REPORT)
     args = parser.parse_args()
+    report = args.output.resolve()
+    report.mkdir(parents=True, exist_ok=True)
     mesa, sdk, inlist, massfile = (path.resolve() for path in
                                   [args.mesa_dir, args.sdk_dir, args.inlist, args.massfile])
     mass_sha = hashlib.sha256(massfile.read_bytes()).hexdigest()
@@ -35,7 +38,7 @@ def main():
     before = cache_inventory(source_cache)
     if not before:
         raise ValueError('No installed EOS binary caches to reuse')
-    cache_root, temp_root = REPORT / 'runtime_cache', REPORT / 'runtime_temp_cache'
+    cache_root, temp_root = report / 'runtime_cache', report / 'runtime_temp_cache'
     cache_dir = cache_root / 'eosDT_cache'
     cache_dir.mkdir(parents=True, exist_ok=True)
     temp_root.mkdir(parents=True, exist_ok=True)
@@ -59,10 +62,10 @@ def main():
                 'massfile_sha256': mass_sha, 'input_X_Y_Z': [.7, .28, .02],
                 'installed_cache_inventory_before': before, 'cache_root': str(cache_root),
                 'temporary_cache_root': str(temp_root), 'OMP_NUM_THREADS': 1}
-    metadata_path = REPORT / 'probe_metadata.json'
+    metadata_path = report / 'probe_metadata.json'
     metadata_path.write_text(json.dumps(metadata, indent=2) + '\n')
     command = [str(PROBE / 'build/mesa_probe'), str(mesa), str(inlist), str(massfile)]
-    completed = subprocess.run(command, cwd=REPORT, env=environment)
+    completed = subprocess.run(command, cwd=report, env=environment)
     after = cache_inventory(source_cache)
     replaced = [path.name for path in cache_dir.glob('*.bin') if not path.is_symlink()]
     metadata.update(command=command, process_returncode=completed.returncode,
