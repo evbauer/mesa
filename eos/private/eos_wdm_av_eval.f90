@@ -33,7 +33,8 @@ module eos_wdm_av_eval
    use eos_def
    use eos_wdm_av_def, only: eos_wdm_av_table_index
    use eos_wdm_av_load, only: eos_wdm_av_load_isotope
-   use eos_wdm_av_mix, only: eos_wdm_av_options, eos_wdm_av_state, eos_wdm_av_get
+   use eos_wdm_av_mix, only: eos_wdm_av_options, eos_wdm_av_state, eos_wdm_av_get, &
+                             wdm_av_rule_pressure, wdm_av_rule_electron_density
    use chem_def, only: chem_isos, num_chem_isos, iso_name_length
    use auto_diff
    use math_lib
@@ -134,6 +135,7 @@ contains
       opts% newton_tol = rq% WDM_AV_newton_tol
       opts% max_iter = rq% WDM_AV_max_iter
       opts% mixing_entropy = wdm_av_mixing_entropy_code(rq% WDM_AV_mixing_entropy)
+      opts% mixing_rule = wdm_av_mixing_rule_code(rq% WDM_AV_mixing_rule)
       opts% debug_crosscheck = rq% WDM_AV_debug
 
       call eos_wdm_av_get(opts, T, rho, nsp, tbl_idx(1:nsp), A_sp(1:nsp), Z_sp(1:nsp), X_sp(1:nsp), &
@@ -294,5 +296,19 @@ contains
          code = 2
       end select
    end function wdm_av_mixing_entropy_code
+
+
+   integer function wdm_av_mixing_rule_code(mode) result(code)
+      ! Decision D27: 'pressure' (additive volume, default) | 'electron_density'
+      character(len=*), intent(in) :: mode
+      select case (trim(adjustl(mode)))
+      case ('pressure')
+         code = wdm_av_rule_pressure
+      case ('electron_density')
+         code = wdm_av_rule_electron_density
+      case default
+         code = wdm_av_rule_pressure
+      end select
+   end function wdm_av_mixing_rule_code
 
 end module eos_wdm_av_eval

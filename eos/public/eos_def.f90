@@ -306,12 +306,14 @@
          character(len=strlen) :: WDM_AV_table_dir  ! '' => mesa_data_dir/eosWDM_AV_data
          character(len=strlen) :: WDM_AV_table_set  ! table-set subdirectory (e.g. 'skye', 'ideal')
          character(len=strlen) :: WDM_AV_mixing_entropy  ! 'none' | 'ions' | 'ions_electrons'
+         character(len=strlen) :: WDM_AV_mixing_rule  ! 'pressure' | 'electron_density'
          logical :: WDM_AV_rescale_missing_isotopes
          real(dp) :: mass_fraction_limit_for_WDM_AV
          real(dp) :: logRho_min_for_any_WDM_AV, logRho_min_for_all_WDM_AV
          real(dp) :: logRho_max_for_all_WDM_AV, logRho_max_for_any_WDM_AV
          real(dp) :: logT_min_for_any_WDM_AV, logT_min_for_all_WDM_AV
          real(dp) :: logT_max_for_all_WDM_AV, logT_max_for_any_WDM_AV
+         real(dp) :: Gamma_max_for_all_WDM_AV, Gamma_max_for_any_WDM_AV
          real(dp) :: WDM_AV_newton_tol
          integer :: WDM_AV_max_iter
          logical :: WDM_AV_debug

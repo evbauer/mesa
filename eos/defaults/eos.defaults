@@ -315,6 +315,34 @@
       logT_max_for_any_WDM_AV = 7.5
 
 
+   ! WDM_AV coupling-parameter limit
+   ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   ! The per-isotope tables are fluid-phase; the component must hand over to Skye
+   ! before crystallization. The mixture ion coupling parameter
+   ! ``Gamma = <Z^(5/3)> e^2 / (a_e k T)`` (full ionization, electron-sphere radius
+   ! ``a_e`` from the mean electron density) ramps the component out: fully used for
+   ! ``Gamma <= Gamma_max_for_all_WDM_AV``, not used for
+   ! ``Gamma >= Gamma_max_for_any_WDM_AV``, smooth ramp between (Decision D23).
+   ! A value <= 0 for ``Gamma_max_for_any_WDM_AV`` disables the limit.
+   ! ::
+
+      Gamma_max_for_all_WDM_AV = 50d0
+      Gamma_max_for_any_WDM_AV = 70d0
+
+
+   ! ``WDM_AV_mixing_rule``
+   ! ~~~~~~~~~~~~~~~~~~~~~~
+   ! How the per-isotope tables are combined (Decision D27).
+   ! ``'pressure'``: additive volume at common pressure and temperature (the
+   ! reference construction). ``'electron_density'``: each species evaluated at the
+   ! density that gives the mixture's mean electron density,
+   ! ``rho_i = rho (Z_i/A_i) / y_e``, which is the atom-in-jellium mixture
+   ! construction and the linear mixing rule for fully ionized matter.
+   ! ::
+
+      WDM_AV_mixing_rule = 'pressure'
+
+
    ! WDM_AV Solver controls
    ! ~~~~~~~~~~~~~~~~~~~~~~
    ! Tolerance and iteration cap for the additive-volume Newton solve, and a

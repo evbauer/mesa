@@ -57,6 +57,7 @@ module eos_wdm_av_mix
    public :: eos_wdm_av_get
    public :: wdm_av_ierr_no_converge
    public :: wdm_av_ierr_bad_domain
+   public :: wdm_av_rule_pressure, wdm_av_rule_electron_density
 
    ! mix-level error codes (distinct from the def-level codes)
    integer, parameter :: wdm_av_ierr_no_converge = -111
@@ -67,11 +68,16 @@ module eos_wdm_av_mix
    integer, parameter :: wdm_av_mix_ions = 1
    integer, parameter :: wdm_av_mix_ions_electrons = 2
 
+   ! mixing rule (Decision D27): how the species' partial densities are chosen
+   integer, parameter :: wdm_av_rule_pressure = 0          ! additive volume at common P, T
+   integer, parameter :: wdm_av_rule_electron_density = 1  ! common mean electron density, rho_i = rho (Z_i/A_i)/y_e
+
    ! run-time options
    type eos_wdm_av_options
       real(dp) :: newton_tol = 1d-12
       integer :: max_iter = 50
       integer :: mixing_entropy = wdm_av_mix_ions_electrons   ! 0 none, 1 ions, 2 ions+electrons
+      integer :: mixing_rule = wdm_av_rule_pressure            ! 0 common pressure (AV), 1 common electron density
       logical :: debug_crosscheck = .false.
       logical :: include_radiation = .true.    ! for the tests; pack always adds radiation
       integer :: deriv_steps = 2               ! hidden: # auto_diff Newton steps (default 2)
