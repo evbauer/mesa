@@ -286,3 +286,49 @@ validated support; do not repair the cold tables or change EOS selection here.
 Offline composition holdouts are feasible, with explicit audited metadata
 handling where redundant display endpoints are wrong, but gauges, nonconvex
 weights, source-family coverage and runtime composition remain separate gates.
+
+### Latest bounded decision — table-only work remains the scope
+
+Existing-table validation now includes native-only shifted stencils: the
+standard source floor stays3.2, and a separate explicitly requested3.1 clean
+control rejects every donor below the known-bug threshold. Both recover active
+queries without changing installed source tables or EOS selection. Whole-cell
+numerical Bernstein/reference-split bounds establish positive Cv and P_rho in
+the declared full-own-use cells, subject to their numerical guard conventions;
+they do not establish source accuracy or blend/whole-domain stability.
+
+Double-knot quintic C3 source fits have structural null modes; a declared
+integrated normal-fourth roughness selector removes that ambiguity. It improves
+some active-geometry tails but none of18additional H/He/dense coarse cases
+improves Cv p99 over matching C4. A hard E/TS/P-constrained C3 control is
+feasible at one coarse patch but does not uniformly improve the same holdouts.
+Do not treat a small identity residual, exact retained node, rank pass, or
+smooth derivative as a physical-accuracy acceptance gate by itself.
+
+The user explicitly limits this phase to existing tabulations; Stage3's
+direct-source acquisition and new-table options are deferred, not prerequisites
+to making useful table-only progress. Independent full-resolution offnode
+accuracy remains unknown and must be reported as such. Before runtime work:
+
+1. Evaluate the smoother's analytic-reference/gauge sensitivity, declared
+   selector weights, patch-support and common-target refinement; avoid tuning
+   and claiming performance on the same withheld targets.
+   The bounded known a+bT audit034 now confirms combined gauge/scale/spline-
+   representation sensitivity of the raw total-potential roughness objective;
+   exact analytic reference removal preserves invariant fields. Declare a
+   canonical reference/scaling convention or validate a gauge-invariant
+   objective before selecting parameters. This is not a source-table gauge fix.
+2. Make an explicit bounded experiment decision: exact nodal biquintic fidelity
+   versus response-Jacobian continuity, or continue potential reconciliation.
+   Keep all caller outputs consistent with the chosen potential.
+3. If authorized after that decision, implement only a default-off, fixed-X/Z
+   component comparison with strict metadata and counted invalid-cell fallback.
+   Preserve selection/blend controls and exclude unsupported compositions.
+4. Test actual solver consumers of Cp/chi and Cv partials, including standard
+   gravitational heating and constant-density burning. The offline eps-grav
+   control shows jumps are multiplied by thermodynamic increments; a large
+   map residual alone does not demonstrate a large stellar Jacobian defect.
+
+No runtime path is accepted or enabled by these table-only controls. The
+separate progress PDF and RESUME.md carry the latest quantitative findings,
+test status and next-allocation instructions.

@@ -89,6 +89,14 @@ Generated caches must live in experiment-owned, ignored output directories.
   metadata cache, physical-coordinate real/AD evaluation and table crosschecks.
 - `c3_control/`, `smooth_validation/`: biseptic and regional C4 controls with
   common heldouts, smoothness/fidelity tradeoffs, and positivity diagnostics.
+- `c3_spline_control/`: double-knot quintic C3 rank audit and explicit normal-
+  fourth roughness selector; unsuccessful full fits remain recorded/rejected.
+- `regional_c3/`: eighteen declared coarse fits paired with archived C4;
+  no uniform Cv tail improvement and no runtime representation selected.
+- `first_constraint_control/`: one coarse C3 fit with hard E/TS/P constraints
+  and soft second responses; exact retained nodes do not ensure better holdouts.
+- `c3_gauge_control/`: known artificial a+bT offsets reveal smoother selector/
+  scaling/representation sensitivity; analytic removal is not source gauge inference.
 - `composition_control/`: bounded archived-X holdout, gauge checks, and explicit
   audited endpoint metadata; no runtime composition support.
 - `mesa_probe/`, `active_faces.py`, `legacy_face_control.py`, `coverage_gap.py`:
