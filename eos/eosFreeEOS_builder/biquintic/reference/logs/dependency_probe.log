@@ -1,0 +1,4 @@
+/usr/tce/packages/gcc/gcc-10.3.1/bin/ld: build/direct_freeeos.o: in function `MAIN__':
+/g/g14/bauer39/work/WD_Gbar/evbauer/mesa/eos/eosFreeEOS_builder/biquintic/reference/direct_freeeos.f90:106: undefined reference to `free_eos_'
+collect2: error: ld returned 1 exit status
+link_probe_exit_status=1

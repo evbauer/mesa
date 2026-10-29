@@ -1,0 +1,4 @@
+# Illustrative interior coordinates only; not matched printed nodes or an accuracy test.
+# log10rho log10T
+-8.0 4.0
+-7.985 4.013

@@ -1,0 +1,2 @@
+Set FREEEOS_LIBS from verified FreeEOS metadata; dependency is not bundled.
+make: *** [Makefile:21: /g/g14/bauer39/work/WD_Gbar/evbauer/mesa/eos/eosFreeEOS_builder/biquintic/reference/build/direct_freeeos] Error 1
