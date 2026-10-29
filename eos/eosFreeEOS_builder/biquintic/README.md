@@ -98,6 +98,8 @@ Generated caches must live in experiment-owned, ignored output directories.
   solver validation and not an independent EOS accuracy test.
 - `gauge_control.py`: finite-grid constant/linear-temperature gauge covariance,
   not inferred historical gauge errors or a change to source E/S conventions.
+- `gravity_control.py`: offline standard-eps-grav EOS-term Jacobian at exact
+  pure-FreeEOS faces, with fixed previous-state increments; not a stellar solve.
 - `run_validation.py`: installed-file protections, checksums and the standalone
   Python/Fortran/probe regression suites; requires existing compatible binaries.
 
