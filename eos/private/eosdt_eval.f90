@@ -478,7 +478,7 @@
 
          if (rq% use_WDM_AV) then
             call Get_WDM_AV_alfa( &
-               rq, logRho, logT, Z, abar, &
+               rq, logRho, logT, Z, abar, zbar, &
                alfa, d_alfa_dlogT, d_alfa_dlogRho, &
                ierr)
             if (ierr /= 0) return

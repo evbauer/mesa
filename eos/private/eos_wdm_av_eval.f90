@@ -29,7 +29,7 @@ module eos_wdm_av_eval
    !                          used), 0 inside (fully used).  Do_Blend applies the
    !                          quintic smoothstep.
 
-   use const_def, only: dp, mesa_data_dir
+   use const_def, only: dp, mesa_data_dir, qe, avo, kerg, four_thirds_pi, one_third
    use eos_def
    use eos_wdm_av_def, only: eos_wdm_av_table_index
    use eos_wdm_av_load, only: eos_wdm_av_load_isotope
@@ -164,17 +164,28 @@ contains
    end subroutine get_WDM_AV_for_eosdt
 
 
-   subroutine Get_WDM_AV_alfa(rq, logRho, logT, Z, abar, alfa, d_alfa_dlogT, d_alfa_dlogRho, ierr)
+   subroutine Get_WDM_AV_alfa(rq, logRho, logT, Z, abar, zbar, alfa, d_alfa_dlogT, d_alfa_dlogRho, ierr)
       ! Simple Rho/T ramp blend in the style of Get_Skye_alfa_simple.  alfa is the
       ! fraction handed to the lower cascade levels: 1 outside the "any" box (not
       ! used), 0 inside the "all" box (fully used), linear ramps between.
+      !
+      ! When Gamma_max_for_any_WDM_AV > 0 the in-box weight is additionally
+      ! multiplied by a window in log10(Gamma), where Gamma is the mixture ion
+      ! coupling parameter under full ionization computed as the PC blend does
+      ! (Gamma = zbar**(5/3) * Gamma_e; see Get_PC_alfa / pc_eos GAMImean=Z53*GAME).
+      ! The window is 1 for Gamma <= Gamma_max_for_all_WDM_AV, ramps to 0 at
+      ! Gamma_max_for_any_WDM_AV, and 0 above, keeping WDM_AV clear of the
+      ! crystallized regime and handing over to Skye before the melting line (D23).
+      ! A value <= 0 for Gamma_max_for_any_WDM_AV disables the limit and reproduces
+      ! the present behaviour bit for bit.
       type (EoS_General_Info), pointer :: rq
-      real(dp), intent(in) :: logRho, logT, Z, abar
+      real(dp), intent(in) :: logRho, logT, Z, abar, zbar
       real(dp), intent(out) :: alfa, d_alfa_dlogT, d_alfa_dlogRho
       integer, intent(out) :: ierr
 
       type(auto_diff_real_2var_order1) :: logRho_auto, logT_auto
-      type(auto_diff_real_2var_order1) :: wRho, wT, blend
+      type(auto_diff_real_2var_order1) :: wRho, wT, wGamma, logGamma_auto, blend
+      real(dp) :: logGamma0
 
       ierr = 0
 
@@ -193,8 +204,30 @@ contains
       wT = wdm_av_window(logT_auto, rq% logT_min_for_any_WDM_AV, rq% logT_min_for_all_WDM_AV, &
                          rq% logT_max_for_all_WDM_AV, rq% logT_max_for_any_WDM_AV)
 
-      ! in-box fraction wRho*wT; alfa handed to lower levels is its complement
-      blend = 1d0 - wRho*wT
+      ! in-box fraction wRho*wT, optionally cut by the coupling-parameter window
+      blend = wRho*wT
+
+      if (rq% Gamma_max_for_any_WDM_AV > 0d0) then
+         ! mixture ion coupling parameter under full ionization, PC convention:
+         !   Gamma_e = Ge0 * rho**(1/3) / T,  Ge0 = qe^2 (4/3 pi avo zbar/abar)^(1/3)/kerg
+         !   Gamma   = zbar**(5/3) * Gamma_e
+         ! => log10 Gamma = logGamma0 + logRho/3 - logT, with
+         !    d logGamma/d logRho = 1/3,  d logGamma/d logT = -1 at fixed composition.
+         logGamma0 = (5d0/3d0)*log10(zbar) &
+                     + log10(qe*qe*pow(four_thirds_pi*avo*zbar/abar, one_third)/kerg)
+         logGamma_auto% val = logGamma0 + logRho/3d0 - logT
+         logGamma_auto% d1val1 = one_third   ! d/dlogRho
+         logGamma_auto% d1val2 = -1d0        ! d/dlogT
+         ! window: 1 for log Gamma <= log(Gamma_all), ramp to 0 at log(Gamma_any);
+         ! lower edges set far below so only the upper ramp acts.
+         wGamma = wdm_av_window(logGamma_auto, -1d99, -1d98, &
+                                log10(rq% Gamma_max_for_all_WDM_AV), &
+                                log10(rq% Gamma_max_for_any_WDM_AV))
+         blend = blend*wGamma
+      end if
+
+      ! alfa handed to lower levels is the complement of the in-box fraction
+      blend = 1d0 - blend
 
       alfa = blend% val
       d_alfa_dlogRho = blend% d1val1
