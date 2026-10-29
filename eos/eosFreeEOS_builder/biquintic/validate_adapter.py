@@ -18,7 +18,7 @@ ORDERS = ((0, 0), (1, 0), (0, 1), (2, 0), (1, 1), (0, 2), (3, 0), (2, 1), (1, 2)
 def main():
     workspace = Path(__file__).resolve().parents[4]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--driver", type=Path, default=Path(__file__).with_name("table_fortran") / "table_query")
+    parser.add_argument("--driver", type=Path, default=Path(__file__).with_name("table_fortran") / "build/table_query")
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--source", type=Path, default=workspace / "mesa/data/eosFreeEOS_data/mesa-FreeEOS_02z70x.data")
     parser.add_argument("--baseline", type=Path, default=workspace / "freeeos_report")
@@ -40,7 +40,8 @@ def main():
     logdensity, logtemperature = (sample_q + 2 * sample_t - 12) * LN10, sample_t * LN10
     input_text = "\n".join(f"{density:.17e} {temperature:.17e}" for density, temperature in zip(logdensity, logtemperature)) + "\n"
     environment = os.environ.copy()
-    environment["LD_LIBRARY_PATH"] = str(workspace / "mesasdk-x86_64-linux-26.6.1/lib") + ":" + environment.get("LD_LIBRARY_PATH", "")
+    sdk = workspace / "mesasdk-x86_64-linux-26.6.1"
+    environment["LD_LIBRARY_PATH"] = f"{sdk}/lib:{sdk}/lib64:" + environment.get("LD_LIBRARY_PATH", "")
     command = [str(arguments.driver.resolve()), str(arguments.cache.resolve()), str(header[1]), str(header[2]), metadata["source_sha256"]]
     process = subprocess.run(command, input=input_text, text=True, capture_output=True, check=True, env=environment)
     lines = process.stdout.splitlines()

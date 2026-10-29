@@ -96,6 +96,10 @@ Generated caches must live in experiment-owned, ignored output directories.
   and rejected-stencil coverage. Private caches reuse installed binary links.
 - `inversion_control/`: bounded fixed-density energy self-inversion, not stellar
   solver validation and not an independent EOS accuracy test.
+- `gauge_control.py`: finite-grid constant/linear-temperature gauge covariance,
+  not inferred historical gauge errors or a change to source E/S conventions.
+- `run_validation.py`: installed-file protections, checksums and the standalone
+  Python/Fortran/probe regression suites; requires existing compatible binaries.
 
 Keep generated data out of code commits. Keep future MESA changes separate
 from the report repository and pre-existing plotter edits. Never push.

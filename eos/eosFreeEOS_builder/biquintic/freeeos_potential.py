@@ -88,7 +88,9 @@ def radiation_potential(sample_q, sample_t, orders=EVAL_ORDERS):
     return result
 
 
-def source_constraints(rows, logq, logt, split_radiation=False):
+def source_constraints(rows, logq, logt, split_radiation=False, minimum_logT=3.2):
+    if not np.isfinite(minimum_logT) or minimum_logT < 3.1:
+        raise ValueError("Source-floor control must exclude the known logT<3.1 table bug")
     temperature = np.broadcast_to(10.0**logt[None, :], rows.shape[:2])
     density = 10.0**(logq[:, None] + 2.0 * logt[None, :] - 12.0)
     gas_pressure = 10.0**rows[:, :, 1]
@@ -110,7 +112,7 @@ def source_constraints(rows, logq, logt, split_radiation=False):
         physical[2, 0] = (pressure * rows[:, :, 4] - gas_pressure) / density
         physical[1, 1] = (pressure * rows[:, :, 5] - 4 * radiation_pressure) / density
         physical[0, 2] += 16 * radiation_scale
-    valid = (rows[:, :, 17] == 0) & (logt[None, :] >= 3.2 - 1e-12)
+    valid = (rows[:, :, 17] == 0) & (logt[None, :] >= minimum_logT - 1e-12)
     valid &= abs(rows[:, :, 18] - np.log10(density)) < 1e-10
     valid &= np.all(np.isfinite(rows[:, :, 1:11]), axis=2)
     for orders in LOW_ORDERS:

@@ -14,6 +14,22 @@ from freeeos_potential import (
 
 
 class PreprocessingTests(unittest.TestCase):
+    def test_source_floor_control_cannot_include_known_cold_bug(self):
+        rows = np.zeros((5, 5, 22))
+        logq, logt = np.linspace(-1., 1., 5), np.linspace(3.0, 3.4, 5)
+        density = logq[:, None] + 2 * logt[None, :] - 12
+        rows[:, :, 18] = density
+        rows[:, :, 1:4] = 10.
+        rows[:, :, 4] = 1.
+        rows[:, :, 7] = 1e8
+        _, default, _ = source_constraints(rows, logq, logt)
+        _, control, _ = source_constraints(rows, logq, logt, minimum_logT=3.1)
+        np.testing.assert_array_equal(default, np.broadcast_to(logt[None, :] >= 3.2, default.shape))
+        np.testing.assert_array_equal(control, np.broadcast_to(logt[None, :] >= 3.1, control.shape))
+        for minimum in (3.09, 0., np.nan, np.inf):
+            with self.assertRaises(ValueError):
+                source_constraints(rows, logq, logt, minimum_logT=minimum)
+
     def test_strict_source_header_validation(self):
         header = [51., .7, .02, 2., 3.2, 3.22, .02, 2., 0., .03, .03]
         rows = np.zeros((2, 2, 22))
