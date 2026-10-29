@@ -336,7 +336,8 @@
    ! ``'pressure'``: additive volume at common pressure and temperature (the
    ! reference construction). ``'electron_density'``: each species evaluated at the
    ! density that gives the mixture's mean electron density,
-   ! ``rho_i = rho (Z_i/A_i) / y_e``, which is the atom-in-jellium mixture
+   ! ``rho_i = rho * y_e * A_i / Z_i`` (cell volumes proportional to the nuclear
+   ! charge), which is the atom-in-jellium mixture
    ! construction and the linear mixing rule for fully ionized matter.
    ! ::
 
