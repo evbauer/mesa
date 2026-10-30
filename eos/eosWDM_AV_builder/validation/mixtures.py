@@ -43,6 +43,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -60,7 +61,7 @@ from wdm_av_builder import constants as C
 # --------------------------------------------------------------------------
 # paths and constants
 # --------------------------------------------------------------------------
-DATA_ROOT = Path("/Users/bauer39/work/mesas/evbauer/mesa/data/eosWDM_AV_data")
+DATA_ROOT = Path(os.environ.get("WDM_AV_MESA_DIR") or _HERE.parents[2]) / "data/eosWDM_AV_data"
 REF_DIRS = {
     "skye": DATA_ROOT / "reference_skye_mixtures",
     "helm": DATA_ROOT / "reference_helm_mixtures",
@@ -80,9 +81,7 @@ OUT_DIRS = {
 }
 SOURCE_DIR = DATA_ROOT / "source_skye"  # atomic weights (identical for helm)
 
-DEFAULT_FIGDIR = Path(
-    "/Users/bauer39/work/mesas/evbauer/claude_tex_notes/figures/mixtures"
-)
+DEFAULT_FIGDIR = DATA_ROOT.parents[1].parent / "claude_tex_notes/figures/mixtures"
 DEFAULT_RESULTSDIR = _HERE / "results"
 DEFAULT_HELDOUT = DEFAULT_RESULTSDIR / "heldout_summary.json"
 

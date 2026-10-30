@@ -57,18 +57,14 @@ program blend_sweep
    use chem_def, only: num_chem_isos
    use chem_lib, only: chem_init, chem_get_iso_id
    use const_lib, only: const_init
-   use const_def, only: dp
+   use const_def, only: dp, mesa_dir
    use math_lib
    use utils_lib, only: set_nan, is_bad, mesa_error
 
    implicit none
 
-   character(len=256), parameter :: mesa_root = &
-      '/Users/bauer39/work/mesas/evbauer/mesa'
-   character(len=512), parameter :: inlist_path = &
-      '/Users/bauer39/work/mesas/evbauer/mesa/eos/eosWDM_AV_builder/test_fortran/inlist_blend_sweep'
-   character(len=512), parameter :: data_root = &
-      '/Users/bauer39/work/mesas/evbauer/mesa/data/eosWDM_AV_data'
+   ! locations under MESA_DIR, set after const_init
+   character(len=512) :: inlist_path, data_root
 
    integer, parameter :: max_species = 2
 
@@ -114,8 +110,10 @@ program blend_sweep
    end if
 
    ! ------------------------------------------------------------------
-   call const_init(trim(mesa_root), ierr)
+   call const_init('', ierr)  ! MESA_DIR from the environment
    if (ierr /= 0) call mesa_error(__FILE__, __LINE__, 'const_init failed')
+   inlist_path = trim(mesa_dir)//'/eos/eosWDM_AV_builder/test_fortran/inlist_blend_sweep'
+   data_root = trim(mesa_dir)//'/data/eosWDM_AV_data'
    call math_init()
    call chem_init('isotopes.data', ierr)
    if (ierr /= 0) call mesa_error(__FILE__, __LINE__, 'chem_init failed')

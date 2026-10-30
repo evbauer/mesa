@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -87,8 +88,9 @@ def _regions(logrho2d: np.ndarray, logt2d: np.ndarray) -> dict[str, np.ndarray]:
     }
 
 
-DEFAULT_FIGDIR = Path(
-    "/Users/bauer39/work/mesas/evbauer/claude_tex_notes/figures/heldout"
+DEFAULT_FIGDIR = (
+    Path(os.environ.get("WDM_AV_MESA_DIR") or _HERE.parents[2]).parent
+    / "claude_tex_notes/figures/heldout"
 )
 DEFAULT_RESULTSDIR = Path(__file__).resolve().parent / "results"
 

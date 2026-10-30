@@ -662,7 +662,7 @@ contains
       integer :: ierr, idx, i, j
       real(dp) :: xi, tau, rho, Tk, emax
       logical :: real_exists
-      character(len=256) :: real_file, phys_file
+      character(len=256) :: real_file, phys_file, mesa_dir_env
       real(dp), parameter :: A = 4.0026d0
       integer, parameter :: Z = 2
 
@@ -678,7 +678,8 @@ contains
       end if
 
       ! prefer the builder-produced file for the physics comparison, if present
-      real_file = '/Users/bauer39/work/mesas/evbauer/mesa/data/eosWDM_AV_data/ideal/eosWDM_AV_he4.h5'
+      call get_environment_variable('MESA_DIR', mesa_dir_env)
+      real_file = trim(mesa_dir_env)//'/data/eosWDM_AV_data/ideal/eosWDM_AV_he4.h5'
       inquire(file=trim(real_file), exist=real_exists)
       if (real_exists) then
          phys_file = trim(real_file)

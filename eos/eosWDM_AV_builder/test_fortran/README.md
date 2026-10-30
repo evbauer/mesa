@@ -11,7 +11,7 @@ tabulated equation of state. It exercises the three private `eos` modules
 ## Building and running
 
 ```bash
-export MESA_DIR=/Users/bauer39/work/mesas/evbauer/mesa
+export MESA_DIR=/path/to/this/mesa/checkout
 cd $MESA_DIR/eos && make                      # build the eos library first
 cd eosWDM_AV_builder/test_fortran && make && ./test_interp
 ```

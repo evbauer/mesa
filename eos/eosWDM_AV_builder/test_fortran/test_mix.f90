@@ -19,7 +19,7 @@
 
 program test_mix
    ! Unit tests for the WDM_AV additive-volume mixture module (WP3).
-   use const_def, only: dp, kerg, amu, avo, crad, pi, me, planck_h
+   use const_def, only: dp, kerg, amu, avo, crad, pi, me, planck_h, mesa_dir
    use math_lib
    use auto_diff
    use eos_def
@@ -35,12 +35,8 @@ program test_mix
    implicit none
 
    integer :: npass, nfail
-   character(len=256), parameter :: ideal_dir = &
-      '/Users/bauer39/work/mesas/evbauer/mesa/data/eosWDM_AV_data/ideal'
-   character(len=256), parameter :: skye_dir = &
-      '/Users/bauer39/work/mesas/evbauer/mesa/data/eosWDM_AV_data/skye'
-   character(len=256), parameter :: skye_src = &
-      '/Users/bauer39/work/mesas/evbauer/mesa/data/eosWDM_AV_data/source_skye/eosWDM_AV_c12.txt'
+   ! table locations under MESA_DIR (set in do_init after const_init)
+   character(len=256) :: ideal_dir, skye_dir, skye_src
 
    real(dp) :: kmu
    integer :: info
@@ -84,8 +80,11 @@ contains
    !----------------------------------------------------------------------------
 
    subroutine do_init()
-      call const_init('/Users/bauer39/work/mesas/evbauer/mesa', info)
+      call const_init('', info)  ! MESA_DIR from the environment
       if (info /= 0) call mesa_error(__FILE__, __LINE__, 'const_init')
+      ideal_dir = trim(mesa_dir)//'/data/eosWDM_AV_data/ideal'
+      skye_dir = trim(mesa_dir)//'/data/eosWDM_AV_data/skye'
+      skye_src = trim(mesa_dir)//'/data/eosWDM_AV_data/source_skye/eosWDM_AV_c12.txt'
       call math_init()
       call chem_init('isotopes.data', info)
       if (info /= 0) call mesa_error(__FILE__, __LINE__, 'chem_init')

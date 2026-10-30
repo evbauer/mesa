@@ -18,5 +18,6 @@
    iso_names(1) = 'he4'
    iso_names(2) = 'c12'
    iso_names(3) = 'o16'
-   output_root = '/Users/bauer39/work/mesas/evbauer/mesa/data/eosWDM_AV_data/fine40'
+   ! relative to the mesa_tables directory the generator is run from
+   output_root = '../../../data/eosWDM_AV_data/fine40'
 /

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -51,11 +52,9 @@ LN10 = C.ln10
 # --------------------------------------------------------------------------
 # paths
 # --------------------------------------------------------------------------
-DATA_ROOT = Path("/Users/bauer39/work/mesas/evbauer/mesa/data/eosWDM_AV_data")
+DATA_ROOT = Path(os.environ.get("WDM_AV_MESA_DIR") or _HERE.parents[2]) / "data/eosWDM_AV_data"
 BLEND_ROOT = DATA_ROOT / "blend"
-DEFAULT_FIGDIR = Path(
-    "/Users/bauer39/work/mesas/evbauer/claude_tex_notes/figures/blend"
-)
+DEFAULT_FIGDIR = DATA_ROOT.parents[1].parent / "claude_tex_notes/figures/blend"
 DEFAULT_RESULTSDIR = _HERE / "results"
 
 SETS = ("skye", "helm", "skye_ne", "helm_ne")
