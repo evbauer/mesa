@@ -1,13 +1,22 @@
 # FreeEOS potential interpolation experiments
 
-This is a table-only, standalone prototype on `biquintic_FreeEOS`, not a
-production MESA EOS backend. No selection/blending defaults, distributed tables,
+This existing-table project on `biquintic_FreeEOS` includes a standalone
+potential and a guarded, private, default-off MESA runtime experiment, not a
+production EOS replacement. No selection/blending defaults, distributed tables,
 installed caches, WDM_AV mixing, or FreeEOS low-temperature bug are changed.
 
 The staged roadmap is `../BIQUINTIC_PLAN.md`. The separate living report is
 `../../../../freeeos_biquintic_progress/freeeos_biquintic_progress.pdf` relative
 to this directory. Its experiment outputs record numerical evidence and input
 fingerprints; the initial scientific assessment remains separate.
+
+Current milestone (29 October 2026): the restricted candidate completes a
+100-step frozen-composition stellar A/B with the original backend using one
+coherent private executable. This is not general composition support or
+production acceptance. The actual-API consumer suite retains two failures
+of the same unusually tight scalar stress case; the frozen record is not
+replaced by easier tolerances. Current decisions and task status live in
+`../../../../freeeos_biquintic_progress/NEXT_PHASE_PLAN.md`.
 
 ## Scientific conventions
 
@@ -110,8 +119,20 @@ Generated caches must live in experiment-owned, ignored output directories.
   not inferred historical gauge errors or a change to source E/S conventions.
 - `gravity_control.py`: offline standard-eps-grav EOS-term Jacobian at exact
   pure-FreeEOS faces, with fixed previous-state increments; not a stellar solve.
-- `run_validation.py`: installed-file protections, checksums and the standalone
-  Python/Fortran/probe regression suites; requires existing compatible binaries.
+- `runtime_adapter/`: authenticated fixed-mixture 27-slot return contract,
+  physical state partials, complete hybrid abundance rows and strict guards.
+- `runtime_bridge/`: default-off callback, private EOS/stellar builds, actual
+  API checks and bounded serial client; no general production interface claim.
+- `runtime_consumers/`: frozen scalar/coupled trials through the actual APIs,
+  including retained tight-tolerance failures and separate precision controls.
+- `helm_control/`: native-coordinate HELM face benchmark, not an acceptance
+  threshold transferred from another EOS or routing population.
+- `stellar_control/`, `stellar_candidate/`: original-backend hybrid controls
+  and matched fixed-composition stellar integration with private dependencies.
+- `stellar_consistency/`: matched saved stellar-state component/final identities,
+  not another evolution run or independent physical accuracy.
+- `run_validation.py`: installed-file protections, checksums and available
+  Python/Fortran/probe/private-API regression; requires compatible saved binaries.
 
 Keep generated data out of code commits. Keep future MESA changes separate
 from the report repository and pre-existing plotter edits. Never push.

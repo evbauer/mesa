@@ -9,14 +9,25 @@ stability, response-function smoothness, or MESA solver performance.
 The scientific roadmap is `../../../freeeos_report/freeeos_interpolation_report.pdf`.
 Maintain a separate living progress/results PDF at
 `../../../freeeos_biquintic_progress/freeeos_biquintic_progress.pdf`, rebuilding
-it after substantive milestones, experiments (including failed tests), and
-scope decisions. Keep the initial assessment as background; log revisions,
-reproduction settings, quantitative results, limitations, and next decisions
-in the progress report rather than treating plans as completed tests.
+it after substantive findings and scope decisions. The lead-owned main document
+presents the current scientific assessment, not a chronological implementation
+log. Keep revisions, detailed methods and failed attempts in auxiliary task
+reports under that report repository's `progress_reports/` and numbered
+experiments. Keep the initial assessment as background; distinguish proposals
+from completed evidence. The active plan and checkpoint are `NEXT_PHASE_PLAN.md`
+and `RESUME.md` in the report repository.
 This is a FreeEOS interpolation experiment, not further WDM_AV mixture
 development. OPAL reconstruction and potential blending between different EOS
 models are out of scope. Existing defaults and distributed tables remain the
 baseline until the staged gates below pass.
+
+Current stage (29 October 2026): the guarded, fixed-composition private runtime
+interface and an actual 100-step stellar A/B are implemented and tested.
+Two unusually tight actual-API scalar stress failures remain recorded;
+standard-tolerance scalar/coupled and restricted stellar tests succeed.
+This does not enable production defaults or supply composition derivatives
+of the reconstructed potential. The stages below are the original roadmap;
+use the active report plan for completed gates and remaining work.
 
 The low-temperature FreeEOS table issue is a known, separate MESA bug.
 Its expected upstream mitigation is to move the blend so FreeEOS contributes

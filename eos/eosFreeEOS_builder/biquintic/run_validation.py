@@ -1,4 +1,4 @@
-"""Run standalone regression suites with source/cache protection and provenance."""
+"""Run regression and private EOS diagnostics with source/cache protection."""
 
 import argparse
 import datetime
@@ -29,7 +29,7 @@ def code_inventory():
     for path in sorted(CODE.rglob("*")):
         if not path.is_file() or any(part in ("build", "__pycache__", ".git") for part in path.relative_to(CODE).parts):
             continue
-        if path.suffix in (".py", ".f90", ".md", ".sh", ".txt") or path.name in ("Makefile", ".gitignore", "inlist_probe", "inlist_benchmark"):
+        if path.suffix in (".py", ".f90", ".md", ".sh", ".txt", ".template", ".net", ".list") or path.name in ("Makefile", ".gitignore", "inlist_probe", "inlist_benchmark"):
             selected[str(path.relative_to(WORKSPACE))] = sha256(path)
     return selected
 
@@ -80,7 +80,7 @@ def main():
     before_code, before_protected = code_inventory(), protected_inventory()
     started = time.monotonic()
     result = {"started_at": datetime.datetime.now().astimezone().isoformat(),
-              "scope": "Standalone regression and MESA probe smoke only; no stellar validation, installed table generation or dependency rebuild",
+              "scope": "Python/standalone Fortran regression and existing private EOS API diagnostics; no stellar evolution, table generation or dependency rebuild",
               "command": sys.argv, "python": sys.executable, "sdk": str(sdk),
               "mesa_commit": subprocess.check_output(["git", "-C", str(WORKSPACE / "mesa"), "rev-parse", "HEAD"], text=True).strip(),
               "mesa_worktree_status": subprocess.check_output(["git", "-C", str(WORKSPACE / "mesa"), "status", "--short"], text=True),
