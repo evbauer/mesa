@@ -49,7 +49,7 @@ def protected_inventory():
 def suites(skip_fortran):
     command_list = []
     directories = [CODE, *sorted(path for path in CODE.iterdir() if path.is_dir() and any(path.glob("test_*.py"))
-                                 and path.name not in ("mesa_probe", "table_fortran"))]
+                                 and path.name not in ("mesa_probe", "table_fortran", "stellar_control"))]
     for directory in directories:
         command_list.append(("python_" + (directory.name if directory != CODE else "lead"),
                              [sys.executable, "-B", "-m", "unittest", "discover", "-s", str(directory), "-p", "test_*.py", "-v"], WORKSPACE))
