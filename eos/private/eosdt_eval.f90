@@ -72,6 +72,19 @@
 
       contains
 
+      subroutine check_other_FreeEOS_configuration(rq, ierr)
+         type(EoS_General_Info), pointer :: rq
+         integer, intent(out) :: ierr
+
+         ierr = 0
+         if (.not. rq% use_other_FreeEOS_results) return
+         if (.not. associated(rq% other_FreeEOS_results)) then
+            ierr = -7901
+         else if (rq% okay_to_convert_ierr_to_skip) then
+            ierr = -7902
+         end if
+      end subroutine check_other_FreeEOS_configuration
+
 
       subroutine Test_one_eosDT_component(rq, which_eos, &
             Z, X, abar, zbar, &
@@ -92,6 +105,9 @@
          logical :: skip
 
          include 'formats'
+
+         call check_other_FreeEOS_configuration(rq, ierr)
+         if (ierr /= 0) return
 
          T = atemp; logT = alogtemp
          if (atemp == arg_not_provided .and. alogtemp == arg_not_provided) then
@@ -214,6 +230,9 @@
          logical :: skip, dbg
 
          include 'formats'
+
+         call check_other_FreeEOS_configuration(rq, ierr)
+         if (ierr /= 0) return
 
 
          T = atemp; logT = alogtemp
@@ -1103,6 +1122,10 @@
          real(dp), intent(inout), dimension(nv, species) :: d_dxa
          logical, intent(out) :: skip
          integer, intent(out) :: ierr
+         type(EoS_General_Info), pointer :: rq
+
+         rq => eos_handles(handle)
+         if (rq% use_other_FreeEOS_results) d_dxa = 0d0
          call get1_for_eosdt( &
             handle, eosdt_max_FreeEOS, dbg, Z, X, abar, zbar, &
             species, chem_id, net_iso, xa, &
@@ -1122,6 +1145,15 @@
 
          ! mark this one
          res(i_frac_FreeEOS) = 1.0d0
+
+         if (ierr /= 0 .or. skip) return
+         if (rq% use_other_FreeEOS_results) then
+            call check_other_FreeEOS_configuration(rq, ierr)
+            if (ierr /= 0) return
+            call rq% other_FreeEOS_results( &
+               handle, Z, X, abar, zbar, species, chem_id, net_iso, xa, &
+               rho, logRho, T, logT, res, d_dlnd, d_dlnT, d_dxa, ierr)
+         end if
 
       end subroutine get_FreeEOS_for_eosdt
 

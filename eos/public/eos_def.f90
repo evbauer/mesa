@@ -81,6 +81,21 @@
             integer, intent(out) :: ierr  ! 0 means AOK.
          end subroutine other_eos_interface
 
+         subroutine other_FreeEOS_interface( &
+            handle, metals, hydrogen, abar, zbar, &
+            species, chem_id, net_iso, xa, &
+            rho, logRho, temperature, logT, &
+            res, d_dlnd, d_dlnT, d_dxa, ierr)
+            use const_def, only: dp
+            implicit none
+            integer, intent(in) :: handle, species
+            integer, pointer :: chem_id(:), net_iso(:)
+            real(dp), intent(in) :: metals, hydrogen, abar, zbar, xa(:)
+            real(dp), intent(in) :: rho, logRho, temperature, logT
+            real(dp), intent(inout) :: res(:), d_dlnd(:), d_dlnT(:), d_dxa(:,:)
+            integer, intent(out) :: ierr
+         end subroutine other_FreeEOS_interface
+
       end interface
 
 
@@ -353,6 +368,9 @@
          logical :: eos_logical_ctrl(10)
          character(len=strlen) :: eos_character_ctrl(10)
 
+         logical :: use_other_FreeEOS_results = .false.
+         procedure(other_FreeEOS_interface), pointer, nopass :: other_FreeEOS_results => null()
+
       end type EoS_General_Info
 
 
@@ -557,6 +575,8 @@
          rq% other_eos_frac => null_other_eos_frac
          rq% other_eos_component => null_other_eos_component
          rq% other_eos_results => null_other_eos_results
+         rq% use_other_FreeEOS_results = .false.
+         nullify(rq% other_FreeEOS_results)
 
       end subroutine init_eos_handle_data
 

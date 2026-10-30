@@ -135,7 +135,7 @@
    real(dp) :: tiny_fuzz
 
    ! other eos
-   logical :: use_other_eos_component, use_other_eos_results
+   logical :: use_other_eos_component, use_other_eos_results, use_other_FreeEOS_results
 
    ! debugging
    logical :: dbg
@@ -278,7 +278,7 @@
       tiny_fuzz, &
 
       ! other eos
-      use_other_eos_component, use_other_eos_results, &
+      use_other_eos_component, use_other_eos_results, use_other_FreeEOS_results, &
 
       ! debugging
       dbg, &
@@ -477,6 +477,7 @@
       ! other eos
       rq% use_other_eos_component = use_other_eos_component
       rq% use_other_eos_results = use_other_eos_results
+      rq% use_other_FreeEOS_results = use_other_FreeEOS_results
 
       ! user inputs
       rq% eos_ctrl = eos_ctrl
@@ -639,6 +640,7 @@
       ! other eos
       use_other_eos_component = rq% use_other_eos_component
       use_other_eos_results = rq% use_other_eos_results
+      use_other_FreeEOS_results = rq% use_other_FreeEOS_results
 
       ! user inputs
       eos_ctrl = rq% eos_ctrl
