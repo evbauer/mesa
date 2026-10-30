@@ -28,6 +28,7 @@
       use eoscms_eval, only: Get_CMS_alfa, get_CMS_for_eosdt
       use skye, only: get_Skye_for_eosdt, get_Skye_alfa, get_Skye_alfa_simple
       use eos_wdm_av_eval, only: get_WDM_AV_for_eosdt, Get_WDM_AV_alfa
+      use freeeos_family, only: freeeos_family_results
       use ideal, only: get_ideal_for_eosdt
 
       implicit none
@@ -77,6 +78,10 @@
          integer, intent(out) :: ierr
 
          ierr = 0
+         if (rq% FreeEOS_use_biquintic_interpolation .and. rq% use_other_FreeEOS_results) then
+            ierr = -7903
+            return
+         end if
          if (.not. rq% use_other_FreeEOS_results) return
          if (.not. associated(rq% other_FreeEOS_results)) then
             ierr = -7901
@@ -84,6 +89,12 @@
             ierr = -7902
          end if
       end subroutine check_other_FreeEOS_configuration
+
+      logical function can_skip_eos_error(rq, ierr)
+         type(EoS_General_Info), intent(in) :: rq
+         integer, intent(in) :: ierr
+         can_skip_eos_error = rq% okay_to_convert_ierr_to_skip .and. ierr /= -7950
+      end function can_skip_eos_error
 
 
       subroutine Test_one_eosDT_component(rq, which_eos, &
@@ -398,7 +409,7 @@
             rho, logRho, T, logT, &
             res, d_dlnd, d_dlnT, d_dxa, &
             skip, ierr)
-         if (ierr /= 0 .and. rq% okay_to_convert_ierr_to_skip) then
+         if (ierr /= 0 .and. can_skip_eos_error(rq, ierr)) then
             skip = .true.
             ierr = 0
          end if
@@ -459,7 +470,7 @@
             rho, logRho, T, logT, &
             res, d_dlnd, d_dlnT, d_dxa, &
             skip, ierr)
-         if (ierr /= 0 .and. rq% okay_to_convert_ierr_to_skip) then
+         if (ierr /= 0 .and. can_skip_eos_error(rq, ierr)) then
             skip = .true.
             ierr = 0
          end if
@@ -519,7 +530,7 @@
             rho, logRho, T, logT, &
             res, d_dlnd, d_dlnT, d_dxa, &
             skip, ierr)
-         if (ierr /= 0 .and. rq% okay_to_convert_ierr_to_skip) then
+         if (ierr /= 0 .and. can_skip_eos_error(rq, ierr)) then
             skip = .true.
             ierr = 0
          end if
@@ -586,7 +597,7 @@
             rho, logRho, T, logT, &
             res, d_dlnd, d_dlnT, d_dxa, &
             skip, ierr)
-         if (ierr /= 0 .and. rq% okay_to_convert_ierr_to_skip) then
+         if (ierr /= 0 .and. can_skip_eos_error(rq, ierr)) then
             skip = .true.
             ierr = 0
          end if
@@ -647,7 +658,7 @@
             rho, logRho, T, logT, &
             res, d_dlnd, d_dlnT, d_dxa, &
             skip, ierr)
-         if (ierr /= 0 .and. rq% okay_to_convert_ierr_to_skip) then
+         if (ierr /= 0 .and. can_skip_eos_error(rq, ierr)) then
             skip = .true.
             ierr = 0
          end if
@@ -708,7 +719,7 @@
             rho, logRho, T, logT, &
             res, d_dlnd, d_dlnT, d_dxa, &
             skip, ierr)
-         if (ierr /= 0 .and. rq% okay_to_convert_ierr_to_skip) then
+         if (ierr /= 0 .and. can_skip_eos_error(rq, ierr)) then
             skip = .true.
             ierr = 0
          end if
@@ -772,7 +783,7 @@
             rho, logRho, T, logT, &
             res, d_dlnd, d_dlnT, d_dxa, &
             skip, ierr)
-         if (ierr /= 0 .and. rq% okay_to_convert_ierr_to_skip) then
+         if (ierr /= 0 .and. can_skip_eos_error(rq, ierr)) then
             skip = .true.
             ierr = 0
          end if
@@ -826,7 +837,7 @@
             rho, logRho, T, logT, &
             res, d_dlnd, d_dlnT, d_dxa, &
             skip, ierr)
-         if (ierr /= 0 .and. rq% okay_to_convert_ierr_to_skip) then
+         if (ierr /= 0 .and. can_skip_eos_error(rq, ierr)) then
             skip = .true.
             ierr = 0
          end if
@@ -1109,6 +1120,7 @@
             rho, logRho, T, logT, remaining_fraction, &
             res, d_dlnd, d_dlnT, d_dxa, &
             skip, ierr)
+         use const_def, only: mesa_data_dir, strlen
          integer, intent(in) :: handle
          logical, intent(in) :: dbg
          real(dp), intent(in) :: &
@@ -1123,6 +1135,8 @@
          logical, intent(out) :: skip
          integer, intent(out) :: ierr
          type(EoS_General_Info), pointer :: rq
+         character(len=strlen) :: table_directory
+         integer :: native_ierr
 
          rq => eos_handles(handle)
          if (rq% use_other_FreeEOS_results) d_dxa = 0d0
@@ -1146,7 +1160,25 @@
          ! mark this one
          res(i_frac_FreeEOS) = 1.0d0
 
-         if (ierr /= 0 .or. skip) return
+         if (ierr /= 0 .or. skip) then
+            if (rq% FreeEOS_use_biquintic_interpolation) then
+               ierr = -7950
+               skip = .false.
+            end if
+            return
+         end if
+         if (rq% FreeEOS_use_biquintic_interpolation) then
+            call check_other_FreeEOS_configuration(rq, ierr)
+            if (ierr /= 0) return
+            table_directory = rq% FreeEOS_biquintic_table_dir
+            if (len_trim(table_directory) == 0) &
+               table_directory = trim(mesa_data_dir)//'/eosFreeEOS_biquintic'
+            call freeeos_family_results(trim(table_directory), rq% eosDT_use_linear_interp_for_X, &
+               rq% tiny_fuzz, FreeEOS_XZ_struct, X, Z, species, chem_id, rho, T, &
+               res, d_dlnd, d_dlnT, d_dxa, native_ierr)
+            if (native_ierr /= 0) ierr = -7950
+            return
+         end if
          if (rq% use_other_FreeEOS_results) then
             call check_other_FreeEOS_configuration(rq, ierr)
             if (ierr /= 0) return
@@ -1610,7 +1642,7 @@
                res, d_dlnd, d_dlnT, d_dxa, &
                skip_1st, ierr)
             if (ierr /= 0) then
-               if (.not. rq% okay_to_convert_ierr_to_skip) return
+               if (.not. can_skip_eos_error(rq, ierr)) return
                if (dbg) write(*,*) 'ierr => skip 1st in combine_for_eosdt'
                ierr = 0; skip_1st = .true.
             end if
@@ -1629,7 +1661,7 @@
                res_2, d_dlnd_2, d_dlnT_2, d_dxa_2, &
                skip_1st, ierr)
             if (ierr /= 0) then
-               if (.not. rq% okay_to_convert_ierr_to_skip) return
+               if (.not. can_skip_eos_error(rq, ierr)) return
                if (dbg) write(*,*) 'ierr => skip 1st in combine_for_eosdt'
                ierr = 0; skip_1st = .true.
             end if
@@ -1646,7 +1678,7 @@
                res, d_dlnd, d_dlnT, d_dxa, &
                skip_2nd, ierr)
             if (ierr /= 0) then
-               if (.not. rq% okay_to_convert_ierr_to_skip) return
+               if (.not. can_skip_eos_error(rq, ierr)) return
                if (dbg) write(*,*) 'ierr => skip 2nd in combine_for_eosdt'
                ierr = 0; skip_2nd = .true.
             end if
@@ -1663,7 +1695,7 @@
             res_1, d_dlnd_1, d_dlnT_1, d_dxa_1, &
             skip_2nd, ierr)
          if (ierr /= 0) then
-            if (.not. rq% okay_to_convert_ierr_to_skip) return
+            if (.not. can_skip_eos_error(rq, ierr)) return
             if (dbg) write(*,*) 'ierr => skip 2nd in combine_for_eosdt'
             ierr = 0; skip_2nd = .true.
          end if

@@ -425,6 +425,8 @@
 
       use_other_eos_results = .false.
       use_other_FreeEOS_results = .false.
+      FreeEOS_use_biquintic_interpolation = .false.
+      FreeEOS_biquintic_table_dir = ''
 
 
 ! User controls

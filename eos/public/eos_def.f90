@@ -335,6 +335,8 @@
          logical :: include_radiation, include_elec_pos
          logical :: eosDT_use_linear_interp_for_X
          logical :: eosDT_use_linear_interp_to_HELM
+         logical :: FreeEOS_use_biquintic_interpolation = .false.
+         character(len=strlen) :: FreeEOS_biquintic_table_dir = ''
 
          character(len=128) :: eosDT_file_prefix
 
@@ -576,6 +578,8 @@
          rq% other_eos_component => null_other_eos_component
          rq% other_eos_results => null_other_eos_results
          rq% use_other_FreeEOS_results = .false.
+         rq% FreeEOS_use_biquintic_interpolation = .false.
+         rq% FreeEOS_biquintic_table_dir = ''
          nullify(rq% other_FreeEOS_results)
 
       end subroutine init_eos_handle_data

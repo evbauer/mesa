@@ -130,6 +130,8 @@
    logical :: include_radiation, include_elec_pos
    logical :: eosDT_use_linear_interp_for_X
    logical :: eosDT_use_linear_interp_to_HELM
+   logical :: FreeEOS_use_biquintic_interpolation
+   character(len=strlen) :: FreeEOS_biquintic_table_dir
    character(len=128) :: eosDT_file_prefix
    logical :: okay_to_convert_ierr_to_skip
    real(dp) :: tiny_fuzz
@@ -272,6 +274,8 @@
       include_elec_pos, &
       eosDT_use_linear_interp_for_X, &
       eosDT_use_linear_interp_to_HELM, &
+      FreeEOS_use_biquintic_interpolation, &
+      FreeEOS_biquintic_table_dir, &
       eosDT_file_prefix, &
 
       okay_to_convert_ierr_to_skip, &
@@ -470,6 +474,8 @@
       rq% include_elec_pos = include_elec_pos
       rq% eosDT_use_linear_interp_for_X = eosDT_use_linear_interp_for_X
       rq% eosDT_use_linear_interp_to_HELM = eosDT_use_linear_interp_to_HELM
+      rq% FreeEOS_use_biquintic_interpolation = FreeEOS_use_biquintic_interpolation
+      rq% FreeEOS_biquintic_table_dir = FreeEOS_biquintic_table_dir
       rq% eosDT_file_prefix = eosDT_file_prefix
       rq% okay_to_convert_ierr_to_skip = okay_to_convert_ierr_to_skip
       rq% tiny_fuzz = tiny_fuzz
@@ -633,6 +639,8 @@
       include_elec_pos = rq% include_elec_pos
       eosDT_use_linear_interp_for_X = rq% eosDT_use_linear_interp_for_X
       eosDT_use_linear_interp_to_HELM = rq% eosDT_use_linear_interp_to_HELM
+      FreeEOS_use_biquintic_interpolation = rq% FreeEOS_use_biquintic_interpolation
+      FreeEOS_biquintic_table_dir = rq% FreeEOS_biquintic_table_dir
       eosDT_file_prefix = rq% eosDT_file_prefix
       okay_to_convert_ierr_to_skip = rq% okay_to_convert_ierr_to_skip
       tiny_fuzz = rq% tiny_fuzz

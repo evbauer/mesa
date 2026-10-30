@@ -14,6 +14,10 @@ SRCS := public/eos_def.f90 \
         private/eosdt_eval.f90 \
         private/eosdt_load_tables.f90 \
         private/eosdt_support.f90 \
+        eosFreeEOS_builder/biquintic/arithmetic_control/arithmetic_weights.f90 \
+        eosFreeEOS_builder/biquintic/arithmetic_ad_control/freeeos_biquintic.f90 \
+        eosFreeEOS_builder/biquintic/table_fortran/freeeos_table.f90 \
+        eosFreeEOS_builder/biquintic/family_runtime/freeeos_family.f90 \
         private/eos_helm_eval.f90 \
         private/eos_initialize.f90 \
         private/eos_wdm_av_def.f90 \
@@ -45,7 +49,7 @@ SRCS_CHECK = test/src/test_eos.f90 \
 INTERNAL_DEPENDS_ON := const math utils chem num auto_diff interp_1d interp_2d forum
 EXTERNAL_DEPENDS_ON :=
 BINTYPE := lib
-INCLUDE_DIRS := -Iprivate -Ipublic -Idefaults
+INCLUDE_DIRS = -Iprivate -Ipublic -Idefaults -I$(BUILD_DIR_)/auto_diff/modules
 
 # Testing
 
