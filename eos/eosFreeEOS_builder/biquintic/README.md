@@ -131,6 +131,12 @@ Generated caches must live in experiment-owned, ignored output directories.
   and matched fixed-composition stellar integration with private dependencies.
 - `stellar_consistency/`: matched saved stellar-state component/final identities,
   not another evolution run or independent physical accuracy.
+- `arithmetic_control/`: isolated same-polynomial real-arithmetic improvement,
+  with unchanged AD limitations and the original consumer failures preserved.
+- `arithmetic_ad_control/`: third-order AD jets composed from the stable real
+  derivatives; no change to the cell polynomial, continuity class or stellar backend.
+- `stellar_timestep/`: same-seed matched-age coarse/half exploratory comparison;
+  strict original gate failures and profile-retention limitations stay explicit.
 - `run_validation.py`: installed-file protections, checksums and available
   Python/Fortran/probe/private-API regression; requires compatible saved binaries.
 
