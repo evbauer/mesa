@@ -1,0 +1,43 @@
+&eos
+
+   ! The generator writes radiation-stripped, gas-only source tables.
+   ! HELM honours include_radiation; Skye does not (see README / program header),
+   ! so for Skye the radiation parts of E, S and Cv are subtracted analytically.
+   include_radiation = .false.
+
+   ! Skye options (defaults). The ion-offset convention is recorded in each
+   ! Skye table header (energy_zero line).
+   use_Skye = .true.
+   Skye_use_ion_offsets = .true.
+
+/
+
+
+&table_controls
+
+   ! uniform log10 grid, cgs -- identical to the existing set
+   logRho_min = -8.0d0
+   logRho_max = 10.0d0
+   logT_min   = 3.0d0
+   logT_max   = 9.5d0
+
+   ! resolution -- identical to the existing set
+   pts_per_decade     = 20   ! pure-isotope source tables
+   pts_per_decade_mix = 10   ! reference mixture tables (unused here)
+
+   ! isotope list: only the two missing isotopes (WP8/T0)
+   n_iso = 2
+   iso_names(1) = 'n14'
+   iso_names(2) = 'si28'
+
+   ! output root; blank => $(MESA_DIR)/data/eosWDM_AV_data
+   ! writes source_skye/eosWDM_AV_{n14,si28}.txt (and source_helm/*), leaving the
+   ! seven existing isotope source tables untouched (n_iso=2).
+   output_root = ''
+
+   ! generate the two isotope source tables, no mixtures (mix_last < mix_first)
+   skip_isotope_tables = .false.
+   mix_first = 1
+   mix_last  = 0
+
+/

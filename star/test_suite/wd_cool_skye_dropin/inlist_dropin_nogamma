@@ -1,0 +1,41 @@
+! R3 dropin_nogamma: as R1 but Gamma limit disabled (any = -1) and phase
+! separation off; solver stress test through crystallization with per-isotope
+! Skye tables (no mixture phase diagram, no latent heat, no phase separation).
+! Compare against R0b (baseline with the same two switches off).
+
+&star_job
+   read_extra_star_job_inlist(1) = .true.
+   extra_star_job_inlist_name(1) = 'inlist_common'
+   save_model_filename = 'final_dropin_nogamma.mod'
+/
+
+&eos
+   read_extra_eos_inlist(1) = .true.
+   extra_eos_inlist_name(1) = 'inlist_common'
+
+   WDM_AV_replaces_Skye = .true.
+   use_WDM_AV = .false.
+   WDM_AV_table_set = 'skye'
+   WDM_AV_mixing_rule = 'pressure'
+   Gamma_max_for_all_WDM_AV = 50d0
+   Gamma_max_for_any_WDM_AV = -1d0   ! limit disabled
+/
+
+&kap
+   read_extra_kap_inlist(1) = .true.
+   extra_kap_inlist_name(1) = 'inlist_common'
+/
+
+&controls
+   read_extra_controls_inlist(1) = .true.
+   extra_controls_inlist_name(1) = 'inlist_common'
+   log_directory = 'LOGS_dropin_nogamma'
+   photo_directory = 'photos_dropin_nogamma'
+   do_phase_separation = .false.
+   do_phase_separation_heating = .false.
+/
+
+&pgstar
+   read_extra_pgstar_inlist(1) = .true.
+   extra_pgstar_inlist_name(1) = 'inlist_common'
+/

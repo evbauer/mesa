@@ -356,6 +356,22 @@
       WDM_AV_debug = .false.
 
 
+   ! ``WDM_AV_replaces_Skye``
+   ! ~~~~~~~~~~~~~~~~~~~~~~~~
+   ! TEST HOOK (scratch branch ``WDM_EOS_dropin`` only; never merged into
+   ! ``WDM_EOS``). When ``.true.``, the Skye level of the eosDT cascade evaluates
+   ! WDM_AV on the Skye-derived per-isotope tables in Skye's place, blended into
+   ! Skye through the Gamma window (fully WDM_AV for ``Gamma <= Gamma_max_for_all_WDM_AV``,
+   ! fully Skye for ``Gamma >= Gamma_max_for_any_WDM_AV``). ``Get_Skye_alfa`` is
+   ! unchanged, so the blend polygon, the ramp into neighbouring components and the
+   ! crystallizing core (handled by Skye) are identical to the baseline; only the
+   ! evaluator is swapped. The WDM_AV box level (``use_WDM_AV``) is independent and
+   ! stays off. Stored as a global module flag (not per-handle). Decision D31.
+   ! ::
+
+      WDM_AV_replaces_Skye = .false.
+
+
 ! CMS controls
 ! ------------
 

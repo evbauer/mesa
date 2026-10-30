@@ -27,7 +27,8 @@
       use eos_HELM_eval
       use eoscms_eval, only: Get_CMS_alfa, get_CMS_for_eosdt
       use skye, only: get_Skye_for_eosdt, get_Skye_alfa, get_Skye_alfa_simple
-      use eos_wdm_av_eval, only: get_WDM_AV_for_eosdt, Get_WDM_AV_alfa
+      use eos_wdm_av_eval, only: get_WDM_AV_for_eosdt, Get_WDM_AV_alfa, get_WDM_AV_as_Skye_for_eosdt
+      use eos_wdm_av_def, only: WDM_AV_replaces_Skye_flag
       use ideal, only: get_ideal_for_eosdt
 
       implicit none
@@ -556,7 +557,16 @@
          end if
 
          if (dbg) write(*,1) 'Skye', (1d0 - alfa)*remaining_fraction
-         get_1st => get_Skye_for_eosdt
+         if (WDM_AV_replaces_Skye_flag) then
+            ! TEST HOOK (brief WP8/D31), scratch branch only, never merge into
+            ! WDM_EOS: evaluate WDM_AV (Skye-derived tables) in Skye's place at
+            ! this cascade level.  Get_Skye_alfa above is unchanged, so the
+            ! polygon, the ramp into the neighbours and remaining_fraction are
+            ! identical to the baseline; only the evaluator is swapped.
+            get_1st => get_WDM_AV_as_Skye_for_eosdt
+         else
+            get_1st => get_Skye_for_eosdt
+         end if
 
          get_2nd => get_level4_for_eosdt
          call combine_for_eosdt( &

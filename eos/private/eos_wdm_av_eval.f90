@@ -29,9 +29,10 @@ module eos_wdm_av_eval
    !                          used), 0 inside (fully used).  Do_Blend applies the
    !                          quintic smoothstep.
 
-   use const_def, only: dp, mesa_data_dir, qe, avo, kerg, four_thirds_pi, one_third
+   use const_def, only: dp, i8, mesa_data_dir, qe, avo, kerg, four_thirds_pi, one_third
    use eos_def
-   use eos_wdm_av_def, only: eos_wdm_av_table_index
+   use eos_wdm_av_def, only: eos_wdm_av_table_index, &
+                             wdm_av_dropin_calls, wdm_av_dropin_declines
    use eos_wdm_av_load, only: eos_wdm_av_load_isotope
    use eos_wdm_av_mix, only: eos_wdm_av_options, eos_wdm_av_state, eos_wdm_av_get, &
                              wdm_av_rule_pressure, wdm_av_rule_electron_density
@@ -43,7 +44,7 @@ module eos_wdm_av_eval
    implicit none
 
    private
-   public :: get_WDM_AV_for_eosdt, Get_WDM_AV_alfa
+   public :: get_WDM_AV_for_eosdt, Get_WDM_AV_alfa, get_WDM_AV_as_Skye_for_eosdt
 
 contains
 
@@ -184,8 +185,7 @@ contains
       integer, intent(out) :: ierr
 
       type(auto_diff_real_2var_order1) :: logRho_auto, logT_auto
-      type(auto_diff_real_2var_order1) :: wRho, wT, wGamma, logGamma_auto, blend
-      real(dp) :: logGamma0
+      type(auto_diff_real_2var_order1) :: wRho, wT, wGamma, blend
 
       ierr = 0
 
@@ -208,21 +208,10 @@ contains
       blend = wRho*wT
 
       if (rq% Gamma_max_for_any_WDM_AV > 0d0) then
-         ! mixture ion coupling parameter under full ionization, PC convention:
-         !   Gamma_e = Ge0 * rho**(1/3) / T,  Ge0 = qe^2 (4/3 pi avo zbar/abar)^(1/3)/kerg
-         !   Gamma   = zbar**(5/3) * Gamma_e
-         ! => log10 Gamma = logGamma0 + logRho/3 - logT, with
-         !    d logGamma/d logRho = 1/3,  d logGamma/d logT = -1 at fixed composition.
-         logGamma0 = (5d0/3d0)*log10(zbar) &
-                     + log10(qe*qe*pow(four_thirds_pi*avo*zbar/abar, one_third)/kerg)
-         logGamma_auto% val = logGamma0 + logRho/3d0 - logT
-         logGamma_auto% d1val1 = one_third   ! d/dlogRho
-         logGamma_auto% d1val2 = -1d0        ! d/dlogT
-         ! window: 1 for log Gamma <= log(Gamma_all), ramp to 0 at log(Gamma_any);
-         ! lower edges set far below so only the upper ramp acts.
-         wGamma = wdm_av_window(logGamma_auto, -1d99, -1d98, &
-                                log10(rq% Gamma_max_for_all_WDM_AV), &
-                                log10(rq% Gamma_max_for_any_WDM_AV))
+         ! Gamma window factored into wdm_av_gamma_window so there is a single
+         ! formula shared with the Skye drop-in hook (brief WP8/T1).
+         wGamma = wdm_av_gamma_window(logRho, logT, zbar, abar, &
+                                      rq% Gamma_max_for_all_WDM_AV, rq% Gamma_max_for_any_WDM_AV)
          blend = blend*wGamma
       end if
 
@@ -234,6 +223,179 @@ contains
       d_alfa_dlogT = blend% d1val2
 
    end subroutine Get_WDM_AV_alfa
+
+
+   ! Coupling-parameter window shared by Get_WDM_AV_alfa and the Skye drop-in hook.
+   ! Returns the in-use weight w(Gamma): 1 for Gamma <= Gamma_all, a linear ramp in
+   ! log10(Gamma) down to 0 at Gamma_any, and 0 above.  The mixture ion coupling
+   ! parameter is taken under full ionization in the PC convention,
+   !   Gamma = zbar**(5/3) * Gamma_e,  Gamma_e = Ge0 rho**(1/3)/T,
+   !   Ge0 = qe^2 (4/3 pi avo zbar/abar)^(1/3)/kerg,
+   ! so log10 Gamma = logGamma0 + logRho/3 - logT with d/dlogRho = 1/3, d/dlogT = -1.
+   ! Gamma_any <= 0 disables the limit and returns w = 1 (bit for bit).
+   function wdm_av_gamma_window(logRho, logT, zbar, abar, Gamma_all, Gamma_any) result(wG)
+      real(dp), intent(in) :: logRho, logT, zbar, abar, Gamma_all, Gamma_any
+      type(auto_diff_real_2var_order1) :: wG, logGamma_auto
+      real(dp) :: logGamma0
+
+      if (Gamma_any <= 0d0) then
+         wG = 1d0
+         return
+      end if
+
+      logGamma0 = (5d0/3d0)*log10(zbar) &
+                  + log10(qe*qe*pow(four_thirds_pi*avo*zbar/abar, one_third)/kerg)
+      logGamma_auto% val = logGamma0 + logRho/3d0 - logT
+      logGamma_auto% d1val1 = one_third   ! d/dlogRho
+      logGamma_auto% d1val2 = -1d0        ! d/dlogT
+      ! window: 1 for log Gamma <= log(Gamma_all), ramp to 0 at log(Gamma_any);
+      ! lower edges set far below so only the upper ramp acts.
+      wG = wdm_av_window(logGamma_auto, -1d99, -1d98, log10(Gamma_all), log10(Gamma_any))
+   end function wdm_av_gamma_window
+
+
+   subroutine get_WDM_AV_as_Skye_for_eosdt(handle, dbg, Z, X, abar, zbar, species, chem_id, net_iso, xa, &
+                                           rho, logRho, T, logT, remaining_fraction, &
+                                           res, d_dlnd, d_dlnT, d_dxa, skip, ierr)
+      ! TEST HOOK (brief WP8/T1, Decision D31), scratch branch only, never merge.
+      ! Drop-in for get_Skye_for_eosdt used by get_level3_for_eosdt when
+      ! WDM_AV_replaces_Skye_flag is true.  Evaluates WDM_AV on the Skye-derived
+      ! per-isotope tables with weight w = Gamma window, and Skye with weight 1-w,
+      ! and blends the two result vectors with the same arithmetic Do_Blend uses
+      ! (quintic smoothstep).  WDM_AV's contribution reports in res(i_frac_WDM_AV)
+      ! and Skye's in res(i_frac_Skye), so frac_Skye + frac_WDM_AV here equals
+      ! baseline frac_Skye at every zone after the caller's polygon blend.
+      use skye, only: get_Skye_for_eosdt
+      use eosdt_support, only: Do_Blend
+      integer, intent(in) :: handle
+      logical, intent(in) :: dbg
+      real(dp), intent(in) :: Z, X, abar, zbar, remaining_fraction
+      integer, intent(in) :: species
+      integer, pointer :: chem_id(:), net_iso(:)
+      real(dp), intent(in) :: xa(:)
+      real(dp), intent(in) :: rho, logRho, T, logT
+      real(dp), intent(inout), dimension(nv) :: res, d_dlnd, d_dlnT
+      real(dp), intent(inout), dimension(nv, species) :: d_dxa
+      logical, intent(out) :: skip
+      integer, intent(out) :: ierr
+
+      type (EoS_General_Info), pointer :: rq
+      type(auto_diff_real_2var_order1) :: wG
+      real(dp) :: w, dw_dlogRho, dw_dlogT
+      real(dp), dimension(nv) :: res_wdm, d_dlnd_wdm, d_dlnT_wdm
+      real(dp), dimension(nv) :: res_skye, d_dlnd_skye, d_dlnT_skye
+      real(dp), allocatable :: d_dxa_wdm(:,:), d_dxa_skye(:,:)
+      logical :: skip_wdm, skip_skye, declined
+      integer(i8) :: ndecl
+      logical, parameter :: linear_blend = .false.
+
+      include 'formats'
+
+      ierr = 0
+      skip = .false.
+      rq => eos_handles(handle)
+
+      ! count this drop-in evaluation
+      !$omp critical (wdm_av_dropin_counters)
+      wdm_av_dropin_calls = wdm_av_dropin_calls + 1_i8
+      !$omp end critical (wdm_av_dropin_counters)
+
+      ! Gamma window weight w for WDM_AV (1 below Gamma_all, 0 above Gamma_any)
+      wG = wdm_av_gamma_window(logRho, logT, zbar, abar, &
+                               rq% Gamma_max_for_all_WDM_AV, rq% Gamma_max_for_any_WDM_AV)
+      w = wG% val
+      dw_dlogRho = wG% d1val1
+      dw_dlogT = wG% d1val2
+
+      declined = .false.
+      if (w > 0d0) then
+         allocate(d_dxa_wdm(nv, species))
+         call get_WDM_AV_for_eosdt(handle, dbg, Z, X, abar, zbar, species, chem_id, net_iso, xa, &
+                                   rho, logRho, T, logT, remaining_fraction, &
+                                   res_wdm, d_dlnd_wdm, d_dlnT_wdm, d_dxa_wdm, skip_wdm, ierr)
+         if (ierr /= 0 .or. skip_wdm) then
+            ! WDM_AV asked to serve but declined: fall back to Skye alone, count it
+            ierr = 0
+            declined = .true.
+            w = 0d0
+            dw_dlogRho = 0d0
+            dw_dlogT = 0d0
+         end if
+      end if
+
+      if (declined) then
+         !$omp critical (wdm_av_dropin_counters)
+         wdm_av_dropin_declines = wdm_av_dropin_declines + 1_i8
+         ndecl = wdm_av_dropin_declines
+         !$omp end critical (wdm_av_dropin_counters)
+         ! print (logRho, logT, zbar, abar) at the 1st, 10th, 100th, ... decline
+         if (is_power_of_ten(ndecl)) then
+            write(*,'(a,i0,a,4(1x,1pes13.6))') &
+               ' WDM_AV_replaces_Skye decline #', ndecl, &
+               ' (logRho,logT,zbar,abar) =', logRho, logT, zbar, abar
+         end if
+      end if
+
+      if (w <= 0d0) then
+         ! pure Skye (crystallizing core by design, or a WDM_AV decline)
+         call get_Skye_for_eosdt(handle, dbg, Z, X, abar, zbar, species, chem_id, net_iso, xa, &
+                                 rho, logRho, T, logT, remaining_fraction, &
+                                 res, d_dlnd, d_dlnT, d_dxa, skip_skye, ierr)
+         if (allocated(d_dxa_wdm)) deallocate(d_dxa_wdm)
+         skip = skip_skye
+         return
+      end if
+
+      if (w >= 1d0) then
+         ! pure WDM_AV
+         res = res_wdm; d_dlnd = d_dlnd_wdm; d_dlnT = d_dlnT_wdm
+         d_dxa = d_dxa_wdm   ! zeros (D17)
+         deallocate(d_dxa_wdm)
+         skip = .false.
+         return
+      end if
+
+      ! blend: 0 < w < 1.  Skye provides the complement.
+      allocate(d_dxa_skye(nv, species))
+      call get_Skye_for_eosdt(handle, dbg, Z, X, abar, zbar, species, chem_id, net_iso, xa, &
+                              rho, logRho, T, logT, remaining_fraction, &
+                              res_skye, d_dlnd_skye, d_dlnT_skye, d_dxa_skye, skip_skye, ierr)
+      if (ierr /= 0 .or. skip_skye) then
+         ! Skye itself cannot serve the blend point: hand the whole point up as skip
+         if (allocated(d_dxa_wdm)) deallocate(d_dxa_wdm)
+         if (allocated(d_dxa_skye)) deallocate(d_dxa_skye)
+         skip = .true.
+         ierr = 0
+         return
+      end if
+
+      ! Do_Blend weights res_1 by S(alfa) and res_2 by S(1-alfa) (quintic smooth).
+      ! Put Skye as res_1 with alfa = 1-w so WDM_AV (res_2) gets weight S(w) and
+      ! Skye gets S(1-w); alfa derivatives are those of (1-w).
+      call Do_Blend(rq, species, rho, logRho, T, logT, &
+                    1d0 - w, -dw_dlogT, -dw_dlogRho, linear_blend, &
+                    res_skye, d_dlnd_skye, d_dlnT_skye, d_dxa_skye, &
+                    res_wdm, d_dlnd_wdm, d_dlnT_wdm, d_dxa_wdm, &
+                    res, d_dlnd, d_dlnT, d_dxa)
+
+      deallocate(d_dxa_wdm, d_dxa_skye)
+      skip = .false.
+
+   end subroutine get_WDM_AV_as_Skye_for_eosdt
+
+
+   ! true iff n is a positive power of ten (1, 10, 100, ...), for decline logging
+   logical function is_power_of_ten(n) result(yes)
+      integer(i8), intent(in) :: n
+      integer(i8) :: m
+      yes = .false.
+      if (n < 1_i8) return
+      m = n
+      do while (mod(m, 10_i8) == 0_i8)
+         m = m/10_i8
+      end do
+      yes = (m == 1_i8)
+   end function is_power_of_ten
 
 
    ! trapezoidal window: 0 for x < a_lo, ramps to 1 at b_lo, 1 on [b_lo,b_hi],

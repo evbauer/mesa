@@ -22,6 +22,7 @@
    use const_def, only: dp
    use utils_namelist, only: max_extra_inlists
    use eos_def
+   use eos_wdm_av_def, only: WDM_AV_replaces_Skye_flag  ! TEST HOOK (WP8/D31), scratch branch only
    use math_lib
    use utils_lib, only: mesa_error
 
@@ -127,6 +128,10 @@
    real(dp) :: WDM_AV_newton_tol
    integer :: WDM_AV_max_iter
    logical :: WDM_AV_debug
+   ! TEST HOOK (brief WP8/Decision D31), scratch branch only, never merge into
+   ! WDM_EOS.  Namelist mirror of the global module flag WDM_AV_replaces_Skye_flag
+   ! (stored in eos_wdm_av_def, not EoS_General_Info, to avoid a full ./install).
+   logical :: WDM_AV_replaces_Skye
 
    ! misc
    logical :: include_radiation, include_elec_pos
@@ -271,6 +276,7 @@
       WDM_AV_newton_tol, &
       WDM_AV_max_iter, &
       WDM_AV_debug, &
+      WDM_AV_replaces_Skye, &
 
       ! misc
       include_radiation, &
@@ -472,6 +478,8 @@
       rq% WDM_AV_newton_tol = WDM_AV_newton_tol
       rq% WDM_AV_max_iter = WDM_AV_max_iter
       rq% WDM_AV_debug = WDM_AV_debug
+      ! TEST HOOK (WP8/D31): store into the global module flag, not rq%
+      WDM_AV_replaces_Skye_flag = WDM_AV_replaces_Skye
 
       ! misc
       rq% include_radiation = include_radiation
@@ -637,6 +645,8 @@
       WDM_AV_newton_tol = rq% WDM_AV_newton_tol
       WDM_AV_max_iter = rq% WDM_AV_max_iter
       WDM_AV_debug = rq% WDM_AV_debug
+      ! TEST HOOK (WP8/D31): mirror the global module flag for namelist writing
+      WDM_AV_replaces_Skye = WDM_AV_replaces_Skye_flag
 
       ! misc
       include_radiation = rq% include_radiation

@@ -26,7 +26,7 @@
    pts_per_decade_mix = 10   ! reference mixture tables
 
    ! isotope list (pure, single-species source tables)
-   n_iso = 7
+   n_iso = 9
    iso_names(1) = 'h1'
    iso_names(2) = 'he4'
    iso_names(3) = 'c12'
@@ -34,6 +34,8 @@
    iso_names(5) = 'ne20'
    iso_names(6) = 'ne22'
    iso_names(7) = 'mg24'
+   iso_names(8) = 'n14'
+   iso_names(9) = 'si28'
 
    ! output root; blank => $(MESA_DIR)/data/eosWDM_AV_data
    output_root = ''

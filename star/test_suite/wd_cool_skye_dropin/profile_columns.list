@@ -1,0 +1,29 @@
+! profile_columns.list for wd_cool_skye_dropin (WP8)
+! minimal set needed for the drop-in analysis
+
+   zone
+   mass        ! m/Msun at outer boundary of cell
+   logxm       ! log10((Mstar-m)/Mstar)
+   logT
+   logRho
+   pressure    ! total pressure (pgas + prad)
+   energy      ! specific internal energy (erg/g)
+   entropy     ! specific entropy / (avo*kerg)
+   cv          ! specific heat at constant volume
+   grada       ! dlnT/dlnP at constant S
+   gamma1      ! dlnP/dlnRho at constant S
+   eps_grav    ! -T ds/dt
+   eps_grav_composition_term  ! part of eps_grav from composition change (uses EOS d_dxa)
+
+   eos_phase   ! eos phase (0 liquid, 1 solid)
+
+   ! named eos component fractions; WDM_AV weight = 1 - sum of these
+   eos_frac_OPAL_SCVH
+   eos_frac_HELM
+   eos_frac_Skye
+   eos_frac_PC
+   eos_frac_FreeEOS
+   eos_frac_CMS
+   eos_frac_ideal
+
+   add_abundances   ! mass fractions of all isotopes in the net

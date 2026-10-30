@@ -1,0 +1,18 @@
+! history_columns.list for wd_cool_skye_dropin (WP8)
+! minimal set needed for the drop-in analysis
+
+   model_number
+   star_age
+   log_dt
+   num_retries
+   num_iters          ! = num_solver_iterations
+
+   log_L
+   log_R
+   log_Teff
+   log_center_T
+   log_center_Rho
+   center_degeneracy
+
+   rel_E_err
+   log_rel_run_E_err  ! cumulative relative energy error

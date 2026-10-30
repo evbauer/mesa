@@ -22,10 +22,32 @@ module eos_wdm_av_def
    ! per-species tabulated equation of state.  The processed-table layout this
    ! module mirrors is documented in eos/eosWDM_AV_builder/FORMAT.md.
 
-   use const_def, only: dp
+   use const_def, only: dp, i8
 
    implicit none
    public
+
+   ! ------------------------------------------------------------------------
+   ! TEST HOOK, scratch branch only, never merge into WDM_EOS.
+   ! Module-level flag enabling the "WDM_AV replaces Skye" drop-in experiment
+   ! (brief WP8 / Decision D31).  When true, the Skye cascade level evaluates
+   ! WDM_AV on the Skye-derived per-isotope tables in Skye's place, blended into
+   ! Skye through the Gamma window (see eos_wdm_av_eval::get_WDM_AV_as_Skye_for_eosdt).
+   ! It is stored as a module variable, set from the &eos namelist in
+   ! eos_ctrls_io, rather than a field of EoS_General_Info in eos_def.f90, so that
+   ! this test hook requires no full ./install (a type change in eos_def forces a
+   ! rebuild of star/kap/net/star_data).  Consequence: the flag is GLOBAL, not
+   ! per-handle; this is acceptable for a single-handle test and never ships.
+   logical :: WDM_AV_replaces_Skye_flag = .false.
+
+   ! Drop-in call/decline counters (brief WP8/T1).  Updated under the named OMP
+   ! critical section wdm_av_dropin_counters.  A "decline" is a point where the
+   ! Gamma window asks WDM_AV to serve (w > 0) but WDM_AV returns skip/ierr, so
+   ! Skye serves it alone; w == 0 (crystallizing core handed to Skye by design)
+   ! is NOT a decline.
+   integer(i8) :: wdm_av_dropin_calls = 0_i8
+   integer(i8) :: wdm_av_dropin_declines = 0_i8
+   ! ------------------------------------------------------------------------
 
    ! format version understood by this reader (see FORMAT.md)
    integer, parameter :: wdm_av_format_version = 1

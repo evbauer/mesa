@@ -1,0 +1,38 @@
+! R1 dropin_pressure: WDM_AV replaces Skye, additive-volume (pressure) rule
+
+&star_job
+   read_extra_star_job_inlist(1) = .true.
+   extra_star_job_inlist_name(1) = 'inlist_common'
+   save_model_filename = 'final_dropin_pressure.mod'
+/
+
+&eos
+   read_extra_eos_inlist(1) = .true.
+   extra_eos_inlist_name(1) = 'inlist_common'
+
+   WDM_AV_replaces_Skye = .true.
+   use_WDM_AV = .false.
+   WDM_AV_table_set = 'skye'
+   WDM_AV_mixing_rule = 'pressure'
+   Gamma_max_for_all_WDM_AV = 50d0
+   Gamma_max_for_any_WDM_AV = 70d0
+/
+
+&kap
+   read_extra_kap_inlist(1) = .true.
+   extra_kap_inlist_name(1) = 'inlist_common'
+/
+
+&controls
+   read_extra_controls_inlist(1) = .true.
+   extra_controls_inlist_name(1) = 'inlist_common'
+   log_directory = 'LOGS_dropin_pressure'
+   photo_directory = 'photos_dropin_pressure'
+   do_phase_separation = .true.
+   do_phase_separation_heating = .true.
+/
+
+&pgstar
+   read_extra_pgstar_inlist(1) = .true.
+   extra_pgstar_inlist_name(1) = 'inlist_common'
+/
