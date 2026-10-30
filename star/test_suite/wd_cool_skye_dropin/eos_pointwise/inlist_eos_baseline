@@ -1,0 +1,6 @@
+! point-wise driver: released cascade (as R0 baseline)
+&eos
+   use_Skye = .true.
+   use_PC = .false.
+   Skye_solid_mixing_rule = "Ogata"
+/

@@ -1,0 +1,5 @@
+# WP8 point-wise driver: keep only the source, Makefile and inlists under version control
+in_*.txt
+out_*.txt
+dropin_eval
+.mesa_temp_cache/

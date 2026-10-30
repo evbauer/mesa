@@ -1,0 +1,12 @@
+! point-wise driver: Skye drop-in, common-electron-density rule (as R2)
+&eos
+   use_Skye = .true.
+   use_PC = .false.
+   Skye_solid_mixing_rule = "Ogata"
+   WDM_AV_replaces_Skye = .true.
+   use_WDM_AV = .false.
+   WDM_AV_table_set = 'skye'
+   WDM_AV_mixing_rule = 'electron_density'
+   Gamma_max_for_all_WDM_AV = 50d0
+   Gamma_max_for_any_WDM_AV = 70d0
+/
