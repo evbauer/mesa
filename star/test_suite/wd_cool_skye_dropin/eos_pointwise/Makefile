@@ -1,5 +1,5 @@
 # WP8 point-wise eos driver (scratch branch only). Build with
-#   env MESA_DIR=/Users/bauer39/work/mesas/evbauer/mesa make -C <this dir>
+#   env MESA_DIR=/path/to/this/mesa/checkout make -C <this dir>
 include ../../../../make/defaults-module.mk
 
 MODULE_NAME := wp8-dropin-eval

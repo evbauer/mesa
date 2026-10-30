@@ -23,7 +23,6 @@ program dropin_eval
 
    implicit none
 
-   character(len=256), parameter :: mesa_root = '/Users/bauer39/work/mesas/evbauer/mesa'
    integer, parameter :: nsp = 11
    character(len=8), parameter :: iso(nsp) = [character(len=8) :: &
       'h1', 'he3', 'he4', 'c12', 'n14', 'o16', 'o18', 'ne20', 'ne22', 'mg24', 'si28']
@@ -43,7 +42,7 @@ program dropin_eval
    call get_command_argument(2, infile)
    call get_command_argument(3, outfile)
 
-   call const_init(trim(mesa_root), ierr)
+   call const_init('', ierr)  ! MESA_DIR from the environment
    if (ierr /= 0) call mesa_error(__FILE__, __LINE__, 'const_init failed')
    call math_init()
    call chem_init('isotopes.data', ierr)
