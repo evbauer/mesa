@@ -1,7 +1,10 @@
 """Serial, logged actual-EOS client for fixed-composition experiments."""
 
 import json
+import os
+import selectors
 import subprocess
+import time
 from pathlib import Path
 
 import numpy as np
@@ -29,8 +32,27 @@ def verify_identity():
         raise ValueError("Runtime identity differs from the independently archived payload digest")
 
 
+def validate_success(scenario, route, result):
+    if result.shape != (125,) or result[1] != 0:
+        raise ValueError("Expected a successful actual-EOS protocol record")
+    if not np.all(np.isfinite(result)) or result[3] != 1:
+        raise ValueError("Nonfinite actual EOS output or violated hybrid retention")
+    fractions = result[23:31]
+    if np.any(fractions < 0) or np.any(fractions > 1) or abs(np.sum(fractions) - 1) > 1e-12:
+        raise ValueError("Invalid EOS component fractions")
+    fraction = result[4 + FIELDS["frac_FreeEOS"]]
+    if route == "component" and fraction != 1:
+        raise ValueError("Forced FreeEOS component did not retain its identity")
+    expected_calls = 0 if scenario == "off" else int(fraction > 0)
+    if result[2] != expected_calls:
+        raise ValueError("EOS callback count disagrees with returned routing")
+
+
 class EOSClient:
-    def __init__(self, output):
+    def __init__(self, output, timeout=60.):
+        if not np.isfinite(timeout) or timeout <= 0:
+            raise ValueError("A positive finite per-query timeout is required")
+        self.timeout = float(timeout)
         verify_identity()
         self.output = Path(output).resolve()
         self.output.mkdir(parents=True, exist_ok=True)
@@ -56,16 +78,33 @@ class EOSClient:
         self.query_log.write(record)
         self.process.stdin.write(record)
         self.process.stdin.flush()
-        response = self.process.stdout.readline()
-        if not response:
-            raise RuntimeError("EOS driver closed its stream; inspect " + str(self.output / "driver.stderr"))
+        response = self.read_response()
         self.result_log.write(response)
         values = np.fromstring(response, sep=" ")
         self.count += 1
         if len(values) != 125 or values[0] != self.count:
             raise ValueError("Actual-EOS protocol shape or sequence mismatch")
+        if values[1] == 0:
+            validate_success(scenario, route, values)
         self.memo[key] = values
         return values.copy()
+
+    def read_response(self):
+        deadline = time.monotonic() + self.timeout
+        response = bytearray()
+        with selectors.DefaultSelector() as selector:
+            selector.register(self.process.stdout, selectors.EVENT_READ)
+            while not response.endswith(b"\n"):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not selector.select(remaining):
+                    raise TimeoutError("Actual-EOS query exceeded its response deadline")
+                chunk = os.read(self.process.stdout.fileno(), 4096)
+                if not chunk:
+                    raise RuntimeError("EOS driver closed its response stream")
+                response.extend(chunk)
+                if len(response) > 65536 or response.count(b"\n") > 1:
+                    raise ValueError("Unexpected actual-EOS response framing")
+        return response.decode("ascii")
 
     def state(self, model, route, density_log, temperature_log):
         scenario = {"legacy": "off", "candidate": "candidate"}[model]
@@ -73,20 +112,25 @@ class EOSClient:
         if result[1] != 0:
             raise ValueError(f"Actual EOS status {int(result[1])} at {density_log}, {temperature_log}")
         values, density, thermal = result[4:31], result[31:58], result[58:85]
-        if not np.all(np.isfinite(result[4:])) or result[3] != 1:
-            raise ValueError("Nonfinite actual EOS output or violated hybrid retention")
-        temperature = np.exp(temperature_log)
-        gas = np.exp(values[FIELDS["lnPgas"]])
-        radiation = CRAD * temperature**4 / 3
-        state = {"T": temperature, "rho": np.exp(density_log), "Pgas": gas,
-                 "P": gas + radiation, "P_x": gas * density[0],
-                 "P_t": gas * thermal[0] + 4 * radiation,
-                 "frac_FreeEOS": values[FIELDS["frac_FreeEOS"]], "callback_count": result[2]}
+        validate_success(scenario, route, result)
+        try:
+            with np.errstate(over="raise", invalid="raise", divide="raise"):
+                temperature = np.exp(temperature_log)
+                gas = np.exp(values[FIELDS["lnPgas"]])
+                radiation = CRAD * temperature**4 / 3
+                state = {"T": temperature, "rho": np.exp(density_log), "Pgas": gas,
+                         "P": gas + radiation, "P_x": gas * density[0],
+                         "P_t": gas * thermal[0] + 4 * radiation,
+                         "frac_FreeEOS": values[FIELDS["frac_FreeEOS"]], "callback_count": result[2]}
+        except FloatingPointError as error:
+            raise ValueError("Nonfinite reconstructed actual-EOS state") from error
         for field in ("Cv", "Cp", "chiRho", "chiT", "grad_ad"):
             column = FIELDS[field]
             state[field] = values[column]
             state[field + "_x"] = density[column]
             state[field + "_t"] = thermal[column]
+        if not all(np.isfinite(value) for value in state.values()):
+            raise ValueError("Nonfinite reconstructed actual-EOS state or partial")
         if min(state["P"], state["Cv"], state["Cp"], state["chiRho"]) <= 0:
             raise ValueError("Nonpositive actual EOS pressure or response")
         return state
@@ -98,7 +142,11 @@ class EOSClient:
             status = self.process.wait(timeout=30)
         except subprocess.TimeoutExpired:
             self.process.terminate()
-            self.process.wait(timeout=10)
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=5)
             raise
         finally:
             self.process.stdout.close()
@@ -109,6 +157,7 @@ class EOSClient:
             raise RuntimeError(f"EOS driver exited with status {status}")
         (self.output / "client.json").write_text(json.dumps({"command": self.command,
             "actual_queries": self.count, "identical_query_memo_hits": self.memo_hits,
+            "per_query_timeout_seconds": self.timeout,
             "cache_sha256": PAYLOAD_SHA, "identity_sha256": sha256(IDENTITY),
             "executable_sha256": sha256(self.command[0]),
             "semantics": "serial logged experiment driver; memoization only for exactly identical queries"}, indent=2) + "\n")

@@ -26,7 +26,18 @@ matching module/library builds. The experiment builds EOS in a private
 directory against existing dependencies; it does not replace installed
 libraries, regenerate installed caches, or extract MESA data archives.
 
-Acceptance remains pending until the component/final APIs, malformed inputs,
-strict statuses, mapping/derivatives, auxiliary/hybrid policy, opt-out parity,
-blends and controlled consumers have been checked. A compiled callback alone
-is not runtime or stellar acceptance.
+Experiment050 passes the component/final mapping, strict-error, hybrid,
+opt-out, stronger-blend and derivative checks. Eight additional transport-stub
+checks harden the Python client against wrong callback/fraction relations and
+overflow in reconstructed physical states. Three additional pipe checks cover
+successful lines, EOF and the60-second per-query deadline (20 cases total).
+The client is serial; it is not the stellar callback implementation.
+
+051 repeats the bounded consumers through both APIs with original forcing:
+2542/2544 converge, with the same candidate scalar1e-13stress case failing
+twice. The standard-tolerance results survive; an independent precision
+diagnostic locates the exception within a cell. It is not silently replaced
+by a successful easier-tolerance result. Candidate stellar testing requires
+separate coherent-build, global-composition and hybrid-irrelevance gates.
+Direct adapter malformed-input checks do not sanitize public-MESA pointers
+before its own composition processing. No unrestricted acceptance is claimed.
