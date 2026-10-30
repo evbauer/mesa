@@ -1189,8 +1189,10 @@ def plot_rule_diff(base: str, ne: str, mixture: str, figdir: Path):
     nT = logt.size // nR
     LR = logrho.reshape(nT, nR)
     LT = logt.reshape(nT, nR)
-    norm = TwoSlopeNorm(vmin=-3.0, vcenter=0.0, vmax=3.0)
-    cmap = plt.get_cmap("coolwarm_r").copy()  # blue = ne better (negative)
+    # D21-style diverging scale: blue = negative = common-n_e rule more accurate,
+    # red = positive = AV more accurate; two decades either way.
+    norm = TwoSlopeNorm(vmin=-2.0, vcenter=0.0, vmax=2.0)
+    cmap = plt.get_cmap("coolwarm").copy()
     cmap.set_bad("white")
 
     figdir.mkdir(parents=True, exist_ok=True)
