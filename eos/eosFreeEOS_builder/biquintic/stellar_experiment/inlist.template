@@ -1,0 +1,62 @@
+&star_job
+   load_saved_model = .true.
+   load_model_filename = 'seed.mod'
+   save_model_when_terminate = .true.
+   save_model_filename = 'final.mod'
+   change_initial_net = .true.
+   new_net_name = 'burning21.net'
+   set_initial_model_number = .true.
+   initial_model_number = 0
+   set_initial_dt = .true.
+   years_for_initial_dt = 100
+   auto_extend_net = .false.
+   enable_adaptive_network = .false.
+   pgstar_flag = .false.
+   show_log_description_at_start = .false.
+   warn_run_star_extras = .false.
+   change_initial_rotation_flag = .true.
+   new_rotation_flag = .false.
+/
+&eos
+   use_WDM_AV = .false.
+   use_other_eos_results = .false.
+   use_other_FreeEOS_results = .false.
+   FreeEOS_use_biquintic_interpolation = @BIQUINTIC@
+   FreeEOS_biquintic_table_dir = '@TABLE_DIR@'
+   okay_to_convert_ierr_to_skip = .false.
+/
+&kap
+   Zbase = 0.02
+/
+&controls
+   initial_mass = 1
+   initial_z = 0.02
+   energy_eqn_option = 'eps_grav'
+   use_time_centered_eps_grav = .true.
+   include_composition_in_eps_grav = .true.
+   fix_d_eos_dxa_partials = .true.
+   dxdt_nuc_factor = 1
+   eps_nuc_factor = 1
+   mix_factor = 1
+   op_split_burn = .false.
+   do_element_diffusion = .false.
+   do_conv_premix = .false.
+   mass_change = 0
+   hot_wind_scheme = ''
+   cool_wind_RGB_scheme = ''
+   cool_wind_AGB_scheme = ''
+   use_other_solver_monitor = .true.
+   use_other_before_struct_burn_mix = .true.
+   max_model_number = 8
+   max_years_for_timestep = 1000
+   varcontrol_target = 1d-4
+   max_number_retries = 12
+   history_interval = 1
+   profile_interval = 1
+   photo_interval = 1
+   terminal_interval = 1
+   write_header_frequency = 10
+/
+&pgstar
+/
+&colors

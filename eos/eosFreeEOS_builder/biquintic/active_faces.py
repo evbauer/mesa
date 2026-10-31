@@ -82,7 +82,7 @@ def save_figure(output, samples):
             axis.set_xlabel("log10 rho [g cm^-3]")
             axis.set_ylabel("log10 T [K]")
     figure.colorbar(image, ax=axes, label="log10 |jump in dCv/dlnT| / max(1, |Cv|, |one-sided partials|)", extend="both")
-    figure.suptitle("Exact one-sided potential cell faces, off-node tangential coordinates\nScaled-solar X=.70, Z=.02; gray = MESA FreeEOS inactive; component jumps, NOT final-EOS errors", fontsize=10)
+    figure.suptitle("Exact FreeEOS-only cell-face jumps, off-node tangential coordinates\nScaled-solar X=.70, Z=.02; gray = MESA FreeEOS inactive; no blending applied", fontsize=10)
     for extension in ("pdf", "png"):
         figure.savefig(output / f"active_Cv_faces.{extension}", dpi=180)
     plt.close(figure)

@@ -11,13 +11,18 @@ strictly inside the archived 015 `active_chiT` patch, not patch boundaries.
 
 Three panels show:
 
-- Cv for radius2/mean exact-constraint BQ, independently interpolated legacy Cv
-  from the existing baseline cache, and archived C4 thermo_0.01/thermo_0.1.
-- Physical Cv_t = dCv/dlnT at fixed rho for each **offline component**, not the
+- Cv for radius2/mean exact-constraint BQ (solid blue) and independently
+  interpolated legacy Cv from the existing baseline cache (dashed orange).
+- Physical Cv_t = dCv/dlnT at fixed rho for each **FreeEOS-only curve**, not the
   derivative along this fixed-T density sweep and not runtime-blended MESA Cv_t.
 - Actual default-MESA fracFreeEOS/fracSkye from **one** existing `mesa_probe`
   executable invocation streaming all 1001 points. `use_WDM_AV=.false.` is the
   existing probe's sole inlist override. No guessed own-use mask replaces it.
+
+The archived C4 thermo_0.01/thermo_0.1 curves remain in the numerical audit and
+saved arrays, but are not displayed in the revised Figure 3. The legacy curve
+is drawn after the biquintic, leaving blue visible through the dash gaps where
+the two overlap. Figure 2 is a separate plot and retains its four curves.
 
 The saved 015 full coefficient arrays are evaluated directly by `evaluate_fit`.
 They are total potentials, so radiation is not added again. No fitting function
@@ -26,7 +31,12 @@ Cv/Cv_t reproduction at 256 archived queries guards evaluator compatibility
 after subsequent reader-validation changes. Source/cache/archive/code SHA-256s
 are recorded and reverified; no installed cache is rebuilt.
 
-Runtime shading/labels use measured fractions only. Inactive component curves
+Both thermodynamic panels are FreeEOS-only across the entire slice: no
+blending is applied, even where MESA would blend or exclude FreeEOS. Blending
+therefore cannot cause the plotted blue feature. The jump at logQ=.77 occurs
+at measured FreeEOS fraction one; blending starts only near logQ=.787.
+
+Runtime shading/labels use measured fractions only. Inactive FreeEOS-only curves
 remain visible as explicitly inactive context, never as selected MESA values.
 Region boundaries are estimated between neighboring samples, not exact blend
 boundaries. If there is no inactive region, none is invented.

@@ -167,11 +167,15 @@ def plot_curves(output, sample_q, states, fractions, spans, source_knots):
     import matplotlib.pyplot as plt
 
     figure, axes = plt.subplots(3, 1, figsize=(11.5, 9), sharex=True, constrained_layout=True)
-    colors = {"BQ_exact": "tab:blue", "legacy": "tab:orange", "thermo_0.01": "tab:green", "thermo_0.1": "tab:red"}
-    labels = {"BQ_exact": "Exact-constraint BQ", "legacy": "Legacy independent Cv", "thermo_0.01": "Archived C4 thermo 0.01", "thermo_0.1": "Archived C4 thermo 0.1"}
-    for name, state in states.items():
-        axes[0].plot(sample_q, state["Cv"] / 1e8, color=colors[name], label=labels[name], linewidth=1.4)
-        axes[1].plot(sample_q, state["Cv_t"] / 1e8, color=colors[name], linewidth=1.4)
+    colors = {"BQ_exact": "tab:blue", "legacy": "tab:orange"}
+    labels = {"BQ_exact": "Biquintic free-energy reconstruction", "legacy": "Legacy interpolated Cv column"}
+    linestyles = {"BQ_exact": "-", "legacy": "--"}
+    for name in ("BQ_exact", "legacy"):
+        state = states[name]
+        axes[0].plot(sample_q, state["Cv"] / 1e8, color=colors[name], label=labels[name],
+                     linestyle=linestyles[name], linewidth=1.4)
+        axes[1].plot(sample_q, state["Cv_t"] / 1e8, color=colors[name],
+                     linestyle=linestyles[name], linewidth=1.4)
     shading = ("#b7dfba", "#ffe0a3", "#d6d6d6")
     for axis in axes:
         for span in spans:
@@ -184,7 +188,7 @@ def plot_curves(output, sample_q, states, fractions, spans, source_knots):
     axes[0].set_ylabel(r"$C_v$ [$10^8$ erg g$^{-1}$ K$^{-1}$]")
     axes[1].set_ylabel(r"$\partial C_v/\partial\ln T|_\rho$" + "\n" + r"[$10^8$ erg g$^{-1}$ K$^{-1}$]")
     axes[0].legend(loc="best", fontsize=9, ncol=2)
-    axes[0].set_title(f"Actual active-FreeEOS slice: logT = {SLICE_LOGT:.15f}; X=.70, Z=.02\nOffline component curves, not runtime-blended Cv; archived C4 coefficients only, no refits", fontsize=11)
+    axes[0].set_title(f"FreeEOS-only slice: logT = {SLICE_LOGT:.15f}; X=.70, Z=.02\nNo blending in the thermodynamic curves; shading shows default-MESA selection only", fontsize=11)
     axes[2].plot(sample_q, fractions["FreeEOS"], color="tab:blue", label="Actual MESA fracFreeEOS", linewidth=2)
     axes[2].plot(sample_q, fractions["Skye"], color="tab:purple", label="Actual MESA fracSkye", linewidth=2)
     axes[2].set_ylabel("Actual MESA fractions")

@@ -1,0 +1,2 @@
+include 'basic.net'
+add_isos(na23, al27, si28, p31, s32, cl35, ar40, ca40, ti48, cr52, mn55, fe56, ni58)
