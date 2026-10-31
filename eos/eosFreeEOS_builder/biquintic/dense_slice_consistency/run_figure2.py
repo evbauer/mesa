@@ -26,6 +26,7 @@ from freeeos_potential import (EVAL_ORDERS, LN10, checksum, construct_twists, ev
 from smooth_patch import evaluate_fit
 
 FLOOR = 1e-16
+POTENTIAL_CONVENTION = "Original036 total-potential constraints (split_radiation=False) and saved fits"
 NAMES = ("biquintic", "native_1.0", "thermo_0.1", "legacy")
 COLORS = {"biquintic": "tab:blue", "legacy": "tab:orange",
           "native_1.0": "tab:green", "thermo_0.1": "tab:red"}
@@ -169,6 +170,7 @@ def main():
         traces = {side: {field: saved_output[f"{side}_{field}"] for field in fields}
                   for side in ("left", "right")}
         plot(sample_q, sample_t, curves, face_q, traces)
+        result["potential_convention"] = POTENTIAL_CONVENTION
         result["provenance"]["script_sha256"] = checksum(__file__)
         result["output_sha256"] = {path.name: checksum(path) for path in
                                    (arrays_path, OUTPUT / "figure2_consistency.pdf",
@@ -201,12 +203,14 @@ def main():
     nodes, complete, _ = construct_twists(low, valid, np.diff(logq)[0] * LN10, np.diff(logt)[0] * LN10)
     _, cache = legacy.read_cache(cache_path, len(logq), len(logt))
     patch_q, patch_t = saved["patch_logQ"], saved["patch_logT"]
-    evaluators = {"biquintic": lambda q, t: potential_state(evaluate(nodes, complete, logq, logt, q, t), q, t),
-                  "legacy": lambda q, t: legacy_state(cache, logq, logt, q, t)}
+    evaluators = {"biquintic": lambda query_q, query_t: potential_state(
+        evaluate(nodes, complete, logq, logt, query_q, query_t), query_q, query_t),
+        "legacy": lambda query_q, query_t: legacy_state(cache, logq, logt, query_q, query_t)}
     for name in ("native_1.0", "thermo_0.1"):
         coefficients = saved[f"{name}_coefficients"]
-        evaluators[name] = lambda q, t, coefficients=coefficients: potential_state(
-            evaluate_fit(coefficients, patch_q * LN10, patch_t * LN10, q * LN10, t * LN10), q, t)
+        evaluators[name] = lambda query_q, query_t, coefficients=coefficients: potential_state(
+            evaluate_fit(coefficients, patch_q * LN10, patch_t * LN10,
+                         query_q * LN10, query_t * LN10), query_q, query_t)
     curves = {name: evaluator(sample_q, sample_t) for name, evaluator in evaluators.items()}
     face_indices = np.searchsorted(logq, face_q)
     if not np.array_equal(logq[face_indices], face_q):
@@ -246,7 +250,7 @@ def main():
     result = {"task": "068 Figure 2 returned-entropy consistency", "archive_reproduction_relative": reproduction,
               "archive_guard": 1e-11, "finite_difference": finite_difference,
               "metric": "signed T*(partial s/partial T)_rho/Cv-1, returned entropy and independently returned Cv",
-              "potential_convention": "036 source constraints with default radiation split and 036 saved fits",
+              "potential_convention": POTENTIAL_CONVENTION,
               "legacy_chain_rule": "exp(lnS)*(d_lnS/d_logT-2*d_lnS/d_logQ)/ln(10)",
               "display_floor": FLOOR, "sampling": archived_result["sampling"],
               "dse_Cv": {name: {**summary(curves[name]["dse_Cv"]),
