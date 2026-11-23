@@ -3,6 +3,7 @@ module freeeos_family
    use eos_def, only: DT_XZ_Info, nv, i_lnPgas, i_lnE, i_lnS, i_grad_ad, i_chiRho, i_chiT, &
       i_Cp, i_Cv, i_dE_dRho, i_dS_dT, i_dS_dRho, i_gamma1, i_gamma3, i_mu, i_eta
    use chem_def, only: chem_isos
+   use freeeos_supplement, only: load_source_supplement
    use freeeos_table, only: biquintic_table, table_metadata, potential_partials, thermodynamic_state, &
       load_table, get_metadata, evaluate_table_real, derive_state, partial_vector, table_ok, &
       state_pgas, state_energy, state_entropy, state_cv, state_cp, state_chirho, state_chit, &
@@ -13,11 +14,12 @@ module freeeos_family
    private
    public :: freeeos_family_results, freeeos_family_get_counters
    public :: family_invalid_input, family_manifest_error, family_directory_changed, &
-      family_grid_mismatch, family_unavailable, family_legacy_error
+      family_grid_mismatch, family_unavailable, family_legacy_error, family_unsupported_suffix
 
    integer, parameter :: family_invalid_input=301, family_manifest_error=302
    integer, parameter :: family_directory_changed=303, family_grid_mismatch=304
    integer, parameter :: family_unavailable=305, family_legacy_error=306
+   integer, parameter :: family_unsupported_suffix=307
    integer, parameter :: max_entries=4096
    integer, parameter :: fields(13)=[i_lnPgas,i_lnE,i_lnS,i_grad_ad,i_chiRho,i_chiT, &
       i_Cp,i_Cv,i_dE_dRho,i_dS_dT,i_dS_dRho,i_gamma1,i_gamma3]
@@ -25,6 +27,7 @@ module freeeos_family
       real(dp) :: hydrogen, metals
       integer :: available
       character(len=256) :: filename
+      character(len=3) :: suffix=''
       character(len=64) :: source_sha, payload_sha
       logical :: loaded=.false.
       logical :: attempted=.false.
@@ -34,7 +37,13 @@ module freeeos_family
    type(table_entry), allocatable, save :: entries(:)
    type(DT_XZ_Info), save :: saved_grid
    character(len=:), allocatable, save :: family_directory
+   character(len=:), allocatable, save :: family_source_directory
+   logical, save :: supplemental_family=.false.
    integer(int64), save :: successful_queries=0, failed_queries=0, table_loads=0
+
+   interface freeeos_family_results
+      module procedure freeeos_family_results_ordinary, freeeos_family_results_configured
+   end interface freeeos_family_results
 
 contains
 
@@ -48,9 +57,9 @@ contains
       loads=table_loads
    end subroutine freeeos_family_get_counters
 
-   subroutine freeeos_family_results(directory, linear_x, tiny_fuzz, xz, &
+   subroutine freeeos_family_results_ordinary(directory, linear_x, tiny_fuzz, xz, &
          hydrogen, metals, species, chem_id, rho, temperature, &
-         res, d_dlnd, d_dlnT, d_dxa, ierr)
+         res, d_dlnd, d_dlnT, d_dxa, ierr, source_directory)
       character(len=*), intent(in) :: directory
       logical, intent(in) :: linear_x
       real(dp), intent(in) :: tiny_fuzz, hydrogen, metals, rho, temperature
@@ -59,6 +68,26 @@ contains
       real(dp), intent(inout) :: res(nv), d_dlnd(nv), d_dlnT(nv)
       real(dp), intent(inout) :: d_dxa(nv,species)
       integer, intent(out) :: ierr
+      character(len=*), intent(in), optional :: source_directory
+      character(len=1) :: ordinary_suffixes(size(xz%Zs))
+      ordinary_suffixes=''
+      call freeeos_family_results_configured(directory,linear_x,tiny_fuzz,xz, &
+         hydrogen,metals,species,chem_id,rho,temperature,res,d_dlnd,d_dlnT,d_dxa,ierr,ordinary_suffixes,source_directory)
+   end subroutine freeeos_family_results_ordinary
+
+   subroutine freeeos_family_results_configured(directory, linear_x, tiny_fuzz, xz, &
+         hydrogen, metals, species, chem_id, rho, temperature, &
+         res, d_dlnd, d_dlnT, d_dxa, ierr, suffix_for_z, source_directory)
+      character(len=*), intent(in) :: directory
+      logical, intent(in) :: linear_x
+      real(dp), intent(in) :: tiny_fuzz, hydrogen, metals, rho, temperature
+      type(DT_XZ_Info), intent(in) :: xz
+      integer, intent(in) :: species, chem_id(:)
+      real(dp), intent(inout) :: res(nv), d_dlnd(nv), d_dlnT(nv)
+      real(dp), intent(inout) :: d_dxa(nv,species)
+      integer, intent(out) :: ierr
+      character(len=*), intent(in) :: suffix_for_z(:)
+      character(len=*), intent(in), optional :: source_directory
       real(dp) :: weights(4,2), dx_weights(4,2), dz_weights(4,2)
       real(dp) :: z_weights(2), z_derivatives(2)
       real(dp) :: combined(10), by_x(10), by_z(10), components(10)
@@ -84,10 +113,16 @@ contains
           .not. all(ieee_is_finite(d_dxa(i_mu:i_eta,:)))) goto 900
       ierr=family_grid_mismatch
       if (xz%nZs < 1 .or. xz%nZs > size(xz%Zs)) goto 900
+      if (size(suffix_for_z) < xz%nZs) goto 900
       if (any(xz%nXs_for_Z(1:xz%nZs) < 1) .or. &
           any(xz%nXs_for_Z(1:xz%nZs) > size(xz%Xs_for_Z,1))) goto 900
       call select_z(xz,metals,iz,nz,z_weights,z_derivatives,ierr)
       if (ierr /= table_ok) goto 900
+      do layer=1,nz
+         ierr=family_unsupported_suffix
+         if (len_trim(suffix_for_z(iz(layer))) /= 0 .and. &
+             trim(suffix_for_z(iz(layer))) /= '_CO') goto 900
+      end do
       do layer=1,nz
          call select_x(xz,iz(layer),hydrogen,linear_x,tiny_fuzz, &
             ix(:,layer),nx(layer),weights(:,layer),dx_weights(:,layer),ierr)
@@ -106,7 +141,7 @@ contains
             xcoord=xz%Xs_for_Z(ix(point,layer),iz(layer))
             zcoord=xz%Zs(iz(layer))
 !$omp critical(freeeos_family_cache)
-            call ensure_entry(directory,xz,xcoord,zcoord,entry_index,status)
+            call ensure_entry(directory,xz,xcoord,zcoord,trim(suffix_for_z(iz(layer))),entry_index,status,source_directory)
 !$omp end critical(freeeos_family_cache)
             ierr=status
             if (ierr /= table_ok) goto 900
@@ -159,7 +194,7 @@ contains
       successful_queries=successful_queries+1
       return
 900   call record_failure(ierr,hydrogen,metals,rho,temperature,iz,ix,nz,nx)
-   end subroutine freeeos_family_results
+   end subroutine freeeos_family_results_configured
 
    subroutine record_failure(ierr,hydrogen,metals,rho,temperature,iz,ix,nz,nx)
       integer, intent(in) :: ierr, iz(2), ix(4,2), nz, nx(2)
@@ -176,12 +211,15 @@ contains
 !$omp end critical(freeeos_family_diagnostic)
    end subroutine record_failure
 
-   subroutine ensure_entry(directory,xz,hydrogen,metals,index_entry,status)
+   subroutine ensure_entry(directory,xz,hydrogen,metals,suffix,index_entry,status,source_directory)
       character(len=*), intent(in) :: directory
       type(DT_XZ_Info), intent(in) :: xz
       real(dp), intent(in) :: hydrogen, metals
+      character(len=*), intent(in) :: suffix
       integer, intent(out) :: index_entry, status
-      integer :: position
+      character(len=*), intent(in), optional :: source_directory
+      character(len=:), allocatable :: selected_source_directory, source_filename
+      integer :: position, family_id, filename_length
       index_entry=0
       if (.not. allocated(family_directory)) then
          call read_manifest(directory,xz,status)
@@ -192,9 +230,20 @@ contains
          status=family_grid_mismatch
          if (.not. same_grid(xz,saved_grid)) return
       end if
-      status=family_manifest_error
+      if (supplemental_family) then
+         selected_source_directory=trim(directory)
+         if (present(source_directory)) selected_source_directory=trim(source_directory)
+         status=family_directory_changed
+         if (len(selected_source_directory) == 0) return
+         if (.not. allocated(family_source_directory)) then
+            family_source_directory=selected_source_directory
+         else if (family_source_directory /= selected_source_directory) then
+            return
+         end if
+      end if
+      status=family_unavailable
       do position=1,size(entries)
-         if (is_variant(entries(position)%filename)) cycle
+         if (trim(entries(position)%suffix) /= suffix) cycle
          if (close_coord(hydrogen,entries(position)%hydrogen) .and. &
              close_coord(metals,entries(position)%metals)) then
             index_entry=position
@@ -213,8 +262,18 @@ contains
          return
       end if
       entries(index_entry)%attempted=.true.
-      call load_table(trim(directory)//'/'//trim(entries(index_entry)%filename),hydrogen,metals, &
-         entries(index_entry)%table,status,entries(index_entry)%source_sha)
+      if (supplemental_family) then
+         filename_length=len_trim(entries(index_entry)%filename)
+         source_filename=entries(index_entry)%filename(:filename_length-6)//'.data'
+         family_id=0
+         if (suffix == '_CO') family_id=1
+         call load_source_supplement(family_source_directory//'/'//source_filename, &
+            trim(directory)//'/'//trim(entries(index_entry)%filename),hydrogen,metals,family_id, &
+            entries(index_entry)%source_sha,entries(index_entry)%payload_sha,entries(index_entry)%table,status)
+      else
+         call load_table(trim(directory)//'/'//trim(entries(index_entry)%filename),hydrogen,metals, &
+            entries(index_entry)%table,status,entries(index_entry)%source_sha)
+      end if
       entries(index_entry)%load_status=status
       if (status /= table_ok) return
       entries(index_entry)%loaded=.true.
@@ -229,12 +288,22 @@ contains
       integer :: unit, io_status, count, position, layer, point, matches, ordinary_count
       character(len=80) :: magic
       type(table_entry), allocatable :: candidate(:)
+      logical :: has_supplements
       status=family_manifest_error
-      open(newunit=unit,file=trim(directory)//'/family.manifest',status='old',action='read',iostat=io_status)
+      inquire(file=trim(directory)//'/supplements.manifest',exist=has_supplements)
+      if (has_supplements) then
+         open(newunit=unit,file=trim(directory)//'/supplements.manifest',status='old',action='read',iostat=io_status)
+      else
+         open(newunit=unit,file=trim(directory)//'/family.manifest',status='old',action='read',iostat=io_status)
+      end if
       if (io_status /= 0) return
       read(unit,*,iostat=io_status) magic
       if (io_status /= 0) goto 900
-      if (trim(magic) /= 'FREEEOS_BIQUINTIC_FAMILY_V1') goto 900
+      if (has_supplements) then
+         if (trim(magic) /= 'FREEEOS_BIQUINTIC_SUPPLEMENTS_V1') goto 900
+      else
+         if (trim(magic) /= 'FREEEOS_BIQUINTIC_FAMILY_V1') goto 900
+      end if
       read(unit,*,iostat=io_status) count
       if (io_status /= 0) goto 900
       if (count < 1 .or. count > max_entries) goto 900
@@ -253,11 +322,28 @@ contains
                 len_trim(candidate(position)%payload_sha) /= 64) goto 900
             if (index(candidate(position)%filename,'/') /= 0 .or. &
                 index(candidate(position)%filename,'..') /= 0) goto 900
+            if (has_supplements) then
+               matches=len_trim(candidate(position)%filename)
+               if (matches < 7) goto 900
+               if (candidate(position)%filename(matches-5:matches) /= '.bq.h5') goto 900
+            end if
          end if
+         if (is_variant(candidate(position)%filename)) then
+            candidate(position)%suffix='_CO'
+         else if (unknown_variant(candidate(position)%filename)) then
+            goto 900
+         end if
+      end do
+      do position=1,count
+         do point=position+1,count
+            if (candidate(position)%suffix /= candidate(point)%suffix) cycle
+            if (close_coord(candidate(position)%hydrogen,candidate(point)%hydrogen) .and. &
+                close_coord(candidate(position)%metals,candidate(point)%metals)) goto 900
+         end do
       end do
       ordinary_count=0
       do position=1,count
-         if (is_variant(candidate(position)%filename)) cycle
+         if (candidate(position)%suffix /= '') cycle
          ordinary_count=ordinary_count+1
       end do
       if (ordinary_count /= sum(xz%nXs_for_Z(1:xz%nZs))) goto 900
@@ -265,16 +351,28 @@ contains
          do point=1,xz%nXs_for_Z(layer)
             matches=0
             do position=1,count
-               if (is_variant(candidate(position)%filename)) cycle
+               if (candidate(position)%suffix /= '') cycle
                if (close_coord(xz%Zs(layer),candidate(position)%metals) .and. &
                    close_coord(xz%Xs_for_Z(point,layer),candidate(position)%hydrogen)) matches=matches+1
             end do
             if (matches /= 1) goto 900
          end do
       end do
+      do position=1,count
+         if (candidate(position)%suffix == '') cycle
+         matches=0
+         do layer=1,xz%nZs
+            if (.not. close_coord(xz%Zs(layer),candidate(position)%metals)) cycle
+            do point=1,xz%nXs_for_Z(layer)
+               if (close_coord(xz%Xs_for_Z(point,layer),candidate(position)%hydrogen)) matches=matches+1
+            end do
+         end do
+         if (matches /= 1) goto 900
+      end do
       call move_alloc(candidate,entries)
       family_directory=trim(directory)
       saved_grid=xz
+      supplemental_family=has_supplements
       status=table_ok
 900   close(unit)
    end subroutine read_manifest
@@ -303,9 +401,38 @@ contains
       integer :: length
       length=len_trim(filename)
       is_variant=.false.
+      if (length >= 9) then
+         if (filename(length-8:length) == '_CO.bq.h5') then
+            is_variant=.true.
+            return
+         end if
+      end if
       if (length < 6) return
       is_variant=filename(length-5:length) == '_CO.bq'
    end function is_variant
+
+   logical function unknown_variant(filename)
+      character(len=*), intent(in) :: filename
+      integer :: separator, length
+      length=len_trim(filename)
+      if (length >= 6) then
+         if (filename(length-5:length) == '.bq.h5') length=length-3
+      end if
+      if (trim(filename) == '-') then
+         unknown_variant=.false.
+         return
+      end if
+      unknown_variant=.false.
+      if (length < 4) return
+      if (filename(length-2:length) /= '.bq') return
+      separator=index(filename(1:length-3),'_',back=.true.)
+      if (separator == 0 .or. separator == length-3) then
+         unknown_variant=.false.
+         return
+      end if
+      unknown_variant=scan(filename(separator+1:separator+1), &
+         'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz') /= 0
+   end function unknown_variant
 
    subroutine select_z(xz,metals,indices,count,weight,dweight,status)
       type(DT_XZ_Info), intent(in) :: xz

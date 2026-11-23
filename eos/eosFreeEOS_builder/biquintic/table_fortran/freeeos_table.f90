@@ -9,6 +9,7 @@ module freeeos_table
    public :: potential_partials, table_metadata, biquintic_table, thermodynamic_state
    public :: load_table, get_metadata, evaluate_table_real, evaluate_table_ad, derive_state
    public :: partial_vector, ad_vector, read_tokens
+   public :: assemble_table, get_node_constraints
    public :: table_ok, table_io_error, table_format_error, table_mismatch, table_unloaded
    public :: table_invalid_input, table_out_of_bounds, table_invalid_cell, table_arithmetic_failure
    public :: table_nonphysical, state_count, state_names
@@ -51,6 +52,53 @@ module freeeos_table
    end type thermodynamic_state
 
 contains
+
+   subroutine assemble_table(metadata, nodes, valid, table, status)
+      type(table_metadata), intent(in) :: metadata
+      real(dp), intent(in) :: nodes(0:,0:,:,:)
+      logical, intent(in) :: valid(:,:)
+      type(biquintic_table), intent(out) :: table
+      integer, intent(out) :: status
+      integer :: axis_index, allocation_status
+      status=table_format_error
+      if (min(metadata%nq,metadata%nt) < 2 .or. max(metadata%nq,metadata%nt) > max_axis) return
+      if (int(metadata%nq,int64)*int(metadata%nt,int64) > max_nodes) return
+      if (any(shape(nodes) /= [3,3,metadata%nq,metadata%nt])) return
+      if (any(shape(valid) /= [metadata%nq,metadata%nt])) return
+      if (.not. all(ieee_is_finite(nodes))) return
+      if (.not. any(valid)) return
+      if (.not. all(ieee_is_finite([metadata%u_min,metadata%du,metadata%tau_min,metadata%dtau]))) return
+      if (metadata%du <= 0 .or. metadata%dtau <= 0) return
+      allocate(table%u_axis(metadata%nq),table%tau_axis(metadata%nt), &
+         table%nodes(0:2,0:2,metadata%nq,metadata%nt),table%valid(metadata%nq,metadata%nt),stat=allocation_status)
+      status=table_io_error
+      if (allocation_status /= 0) return
+      do axis_index=1,metadata%nq
+         table%u_axis(axis_index)=metadata%u_min+real(axis_index-1,dp)*metadata%du
+      end do
+      do axis_index=1,metadata%nt
+         table%tau_axis(axis_index)=metadata%tau_min+real(axis_index-1,dp)*metadata%dtau
+      end do
+      status=table_format_error
+      if (.not. axis_valid(table%u_axis) .or. .not. axis_valid(table%tau_axis)) return
+      table%metadata=metadata
+      table%nodes=nodes
+      table%valid=valid
+      status=table_ok
+   end subroutine assemble_table
+
+   subroutine get_node_constraints(table, nodes, valid, status)
+      type(biquintic_table), intent(in) :: table
+      real(dp), allocatable, intent(out) :: nodes(:,:,:,:)
+      logical, allocatable, intent(out) :: valid(:,:)
+      integer, intent(out) :: status
+      status=table_unloaded
+      if (.not. allocated(table%nodes)) return
+      allocate(nodes(0:2,0:2,table%metadata%nq,table%metadata%nt))
+      nodes=table%nodes
+      valid=table%valid
+      status=table_ok
+   end subroutine get_node_constraints
 
    subroutine load_table(path, expected_x, expected_z, table, status, expected_sha)
       character(len=*), intent(in) :: path

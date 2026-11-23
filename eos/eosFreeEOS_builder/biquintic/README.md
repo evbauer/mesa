@@ -1,22 +1,52 @@
-# FreeEOS potential interpolation experiments
+# FreeEOS potential interpolation
 
-This existing-table project on `biquintic_FreeEOS` includes a standalone
-potential and a guarded, private, default-off MESA runtime experiment, not a
-production EOS replacement. No selection/blending defaults, distributed tables,
-installed caches, WDM_AV mixing, or FreeEOS low-temperature bug are changed.
+This existing-table project on `biquintic_FreeEOS` implements a default-off
+native MESA backend deriving thermodynamics and numerical partials from one
+specific Helmholtz free energy. It retains the existing composition selection
+and weights, including configured C/O variants. The original FreeEOS source
+rows and EOS selection/blending defaults are unchanged. This remains an
+experimental backend with support and stellar-convergence limitations.
 
 The staged roadmap is `../BIQUINTIC_PLAN.md`. The separate living report is
 `../../../../freeeos_biquintic_progress/freeeos_biquintic_progress.pdf` relative
 to this directory. Its experiment outputs record numerical evidence and input
 fingerprints; the initial scientific assessment remains separate.
 
-Current milestone (29 October 2026): the restricted candidate completes a
-100-step frozen-composition stellar A/B with the original backend using one
-coherent private executable. This is not general composition support or
-production acceptance. The actual-API consumer suite retains two failures
-of the same unusually tight scalar stress case; the frozen record is not
-replaced by easier tolerances. Current decisions and task status live in
+Current implementation (23 November 2026): all89sources have compact HDF5
+supplements. At loading, the backend reconstructs six lower constraints from
+the distributed source rows and reads three mixed derivatives through FORUM.
+All nine constraints remain in memory for queries. The archived full-text
+representation remains available for explicit numerical comparisons.
+Broad stellar-suite evidence predates this storage refactor: current per-case
+outcomes include86successful tightened-routing evolutions, two skips, two
+minimum-timestep failures and one user-stopped case. This is not a fully passing
+replacement under default routing. Current decisions and validation status live in
 `../../../../freeeos_biquintic_progress/NEXT_PHASE_PLAN.md`.
+
+## Enabling the native backend
+
+Hydrate the branch's EOS data archives through the usual Git-LFS workflow and
+build/install MESA normally. `eos/Makefile` extracts
+`eosFreeEOS_biquintic_data.tar.xz` after the original FreeEOS archive, overlaying
+the89supplements into `mesa_data_dir/eosFreeEOS_data/`. In an EOS inlist use:
+
+```fortran
+&eos
+   FreeEOS_use_biquintic_interpolation = .true.
+/
+```
+
+The control defaults to false. `FreeEOS_biquintic_table_dir = ''` uses the
+installed data directory; an explicit override is available for development.
+Sources at the native MESA call site always come from the MESA data directory.
+An invoked unsupported query fails explicitly; it does not silently substitute
+legacy FreeEOS. Output-level blends with other EOSs retain their existing form.
+Legacy molecular-weight, electron and degeneracy auxiliary outputs are retained.
+
+The supplement adds188.845MiB to the original1321.928MiB compressed FreeEOS
+archive. See [supplemental_hdf5/README.md](supplemental_hdf5/README.md) and
+[FORMAT.md](supplemental_hdf5/FORMAT.md) for source-based generation, portable
+verification/packaging commands, metadata and FORUM reader limitations.
 
 ## Scientific conventions
 
@@ -48,7 +78,7 @@ replaced by easier tolerances. Current decisions and task status live in
   displayed endpoints against count/minimum/step. The composition sidecar has
   an explicit solar-Z-only, independently audited display-endpoint resolution;
   it never changes rows or authorizes trimming/resampling.
-- Component own-use cuts are not final EOS fractions. The scaled-solar
+- FreeEOS-only diagnostics are not final EOS fractions. The scaled-solar
   `mesa_probe/` measures actual default selection without installing the
   candidate. Pure FreeEOS still contains some large response-Jacobian jumps,
   although many dense tails are Skye-only. Centered stencil support also leaves
@@ -140,5 +170,7 @@ Generated caches must live in experiment-owned, ignored output directories.
 - `run_validation.py`: installed-file protections, checksums and available
   Python/Fortran/probe/private-API regression; requires compatible saved binaries.
 
-Keep generated data out of code commits. Keep future MESA changes separate
-from the report repository and pre-existing plotter edits. Never push.
+Keep experiment-generated caches, binaries and plots out of code commits.
+The supplemental distribution archive is the intentional Git-LFS data artifact.
+Keep future MESA changes separate from the report repository and pre-existing
+plotter edits. Never push without user authorization.

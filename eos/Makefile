@@ -14,9 +14,12 @@ SRCS := public/eos_def.f90 \
         private/eosdt_eval.f90 \
         private/eosdt_load_tables.f90 \
         private/eosdt_support.f90 \
+        eosFreeEOS_builder/biquintic/runtime_adapter/runtime_sha256.f90 \
         eosFreeEOS_builder/biquintic/arithmetic_control/arithmetic_weights.f90 \
         eosFreeEOS_builder/biquintic/arithmetic_ad_control/freeeos_biquintic.f90 \
         eosFreeEOS_builder/biquintic/table_fortran/freeeos_table.f90 \
+        eosFreeEOS_builder/biquintic/supplemental_hdf5/freeeos_source.f90 \
+        eosFreeEOS_builder/biquintic/supplemental_hdf5/freeeos_supplement.f90 \
         eosFreeEOS_builder/biquintic/family_runtime/freeeos_family.f90 \
         private/eos_helm_eval.f90 \
         private/eos_initialize.f90 \
@@ -59,7 +62,7 @@ CHECK_RESULTS_GOLDEN := test/test_output
 
 MODULES := eos_def.mod eos_lib.mod
 INSTALL_INCLUDES := public/helm_def.dek
-EXTRACT_DATA_COMMANDS += ../data/eosFreeEOS_data/.extract-completed ../data/eosCMS_data/.extract-completed ../data/eosDT_data/.extract-completed ../data/eosPC_support_data/.extract-completed
+EXTRACT_DATA_COMMANDS += ../data/eosFreeEOS_data/.extract-completed ../data/eosFreeEOS_data/.biquintic-extract-completed ../data/eosCMS_data/.extract-completed ../data/eosDT_data/.extract-completed ../data/eosPC_support_data/.extract-completed
 
 include $(MAKE_DIR)/Makefile
 
@@ -67,6 +70,10 @@ include $(MAKE_DIR)/Makefile
 	rm -rf ../data/eosFreeEOS_data/
 	rm -rf ../data/eosDT_data/cache/
 	tar -xJf eosFreeEOS_data.tar.xz -C ../data
+	touch $@
+
+../data/eosFreeEOS_data/.biquintic-extract-completed: ../data/eosFreeEOS_data/.extract-completed eosFreeEOS_biquintic_data.tar.xz
+	tar -xJf eosFreeEOS_biquintic_data.tar.xz -C ../data
 	touch $@
 
 ../data/eosCMS_data/.extract-completed: eosCMS_data.tar.xz

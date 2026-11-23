@@ -1172,10 +1172,11 @@
             if (ierr /= 0) return
             table_directory = rq% FreeEOS_biquintic_table_dir
             if (len_trim(table_directory) == 0) &
-               table_directory = trim(mesa_data_dir)//'/eosFreeEOS_biquintic'
+               table_directory = trim(mesa_data_dir)//'/eosFreeEOS_data'
             call freeeos_family_results(trim(table_directory), rq% eosDT_use_linear_interp_for_X, &
                rq% tiny_fuzz, FreeEOS_XZ_struct, X, Z, species, chem_id, rho, T, &
-               res, d_dlnd, d_dlnT, d_dxa, native_ierr)
+               res, d_dlnd, d_dlnT, d_dxa, native_ierr, rq% suffix_for_FreeEOS_Z, &
+               trim(mesa_data_dir)//'/eosFreeEOS_data')
             if (native_ierr /= 0) ierr = -7950
             return
          end if
