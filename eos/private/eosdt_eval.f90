@@ -2234,7 +2234,7 @@
             dS_dlnd, dS_dlnT, dE_dlnd, dE_dlnT, &
             dPgas_dlnd, dPgas_dlnT, dP_dlnd, dP_dlnT
          real(dp) :: logQ0, logQ1, logT0, logT1, logRho0, logRho1
-         integer :: iQ, jtemp, k, j, irho
+         integer :: iQ, jtemp, k, j, irho, legacy_hi
          type (EosDT_xz_Info), pointer :: ep
          logical, parameter :: show = .false.
          real(dp) :: logRho, logT, logQ
@@ -2261,8 +2261,16 @@
             return
          end if
 
+         legacy_hi=nv
+         if (which_eosdt == eosdt_max_FreeEOS .and. rq% FreeEOS_use_biquintic_interpolation) then
+            ! Native thermodynamics replace the other columns. Retain columns
+            ! 1:eta, including pressure/entropy values and partials used by all
+            ! legacy error checks, as well as mu/free-electron/eta auxiliaries.
+            legacy_hi=i_eta
+            fval=0d0; df_dx=0d0; df_dy=0d0
+         end if
          call Do_EoS_Interpolations( &
-            1, nv, nv, ep% num_logQs, ep% logQs, ep% num_logTs, ep% logTs, &
+            1, legacy_hi, nv, ep% num_logQs, ep% logQs, ep% num_logTs, ep% logTs, &
             ep% tbl1, iQ, jtemp, logQ0, logQ, logQ1, logT0, logT, logT1, &
             fval, df_dx, df_dy, ierr)
          if (ierr /= 0) then

@@ -12,13 +12,13 @@ The staged roadmap is `../BIQUINTIC_PLAN.md`. The separate living report is
 to this directory. Its experiment outputs record numerical evidence and input
 fingerprints; the initial scientific assessment remains separate.
 
-Current implementation (23 November 2026): all89sources have compact HDF5
+Current implementation (23 November 2026): all 89 sources have compact HDF5
 supplements. At loading, the backend reconstructs six lower constraints from
 the distributed source rows and reads three mixed derivatives through FORUM.
 All nine constraints remain in memory for queries. The archived full-text
 representation remains available for explicit numerical comparisons.
 Broad stellar-suite evidence predates this storage refactor: current per-case
-outcomes include86successful tightened-routing evolutions, two skips, two
+outcomes include 86 successful tightened-routing evolutions, two skips, two
 minimum-timestep failures and one user-stopped case. This is not a fully passing
 replacement under default routing. Current decisions and validation status live in
 `../../../../freeeos_biquintic_progress/NEXT_PHASE_PLAN.md`.
@@ -28,7 +28,7 @@ replacement under default routing. Current decisions and validation status live 
 Hydrate the branch's EOS data archives through the usual Git-LFS workflow and
 build/install MESA normally. `eos/Makefile` extracts
 `eosFreeEOS_biquintic_data.tar.xz` after the original FreeEOS archive, overlaying
-the89supplements into `mesa_data_dir/eosFreeEOS_data/`. In an EOS inlist use:
+the 89 supplements into `mesa_data_dir/eosFreeEOS_data/`. In an EOS inlist use:
 
 ```fortran
 &eos
@@ -43,10 +43,29 @@ An invoked unsupported query fails explicitly; it does not silently substitute
 legacy FreeEOS. Output-level blends with other EOSs retain their existing form.
 Legacy molecular-weight, electron and degeneracy auxiliary outputs are retained.
 
-The supplement adds188.845MiB to the original1321.928MiB compressed FreeEOS
+The supplement adds 188.845 MiB to the original 1321.928 MiB compressed FreeEOS
 archive. See [supplemental_hdf5/README.md](supplemental_hdf5/README.md) and
 [FORMAT.md](supplemental_hdf5/FORMAT.md) for source-based generation, portable
 verification/packaging commands, metadata and FORUM reader limitations.
+
+## Runtime behavior and validation
+
+Native calls retain legacy auxiliary quantities and analytic partials, but
+evaluate only the six legacy columns through `eta`, including all inputs to
+existing legacy guards. Toggle-off calls retain full legacy interpolation.
+Each thread observes a successfully loaded native table under the shared load
+lock before recording its index. Subsequent lookups read that immutable table
+without the shared lock, while checking directory, source, grid and suffix.
+Misses and failed loads retain the locked path and original error semantics.
+
+Matched state replays show about 9–10 times the pre-optimization native warm
+final-EOS throughput at 28 threads, and 1.16–1.20 times at one thread. Complete
+return/partial, ordinary/C/O, concurrent cold/warm and strict-error parity checks
+pass. Short C/O stellar restarts at one and 28 threads preserve all recorded
+histories and final-model hashes. Startup reconstruction/authentication remains
+once per table per process; neither these warm timings nor the short restarts
+measure a new full stellar-suite speed ratio. Detailed task evidence is in
+`../../../../freeeos_biquintic_progress/progress_reports/2026-11-23_runtime_profile.pdf`.
 
 ## Scientific conventions
 

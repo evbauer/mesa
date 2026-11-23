@@ -35,6 +35,17 @@ module freeeos_family
       type(biquintic_table) :: table
    end type table_entry
    type(table_entry), allocatable, save :: entries(:)
+   ! A thread remembers only entries whose successful load it observed under the
+   ! shared cache lock. Tables are immutable after that publication. No shared
+   ! loaded flag is read speculatively, and misses/failures retain the lock.
+   integer, save :: warm_count=0
+   integer, save :: warm_index(max_entries)=0
+   real(dp), save :: warm_x(max_entries), warm_z(max_entries)
+   character(len=3), save :: warm_suffix(max_entries)
+   character(len=:), allocatable, save :: warm_directory, warm_source_directory
+   logical, save :: warm_supplemental=.false.
+   type(DT_XZ_Info), save :: warm_grid
+!$omp threadprivate(warm_count,warm_index,warm_x,warm_z,warm_suffix,warm_directory,warm_source_directory,warm_supplemental,warm_grid)
    type(DT_XZ_Info), save :: saved_grid
    character(len=:), allocatable, save :: family_directory
    character(len=:), allocatable, save :: family_source_directory
@@ -140,9 +151,7 @@ contains
          do point=1,nx(layer)
             xcoord=xz%Xs_for_Z(ix(point,layer),iz(layer))
             zcoord=xz%Zs(iz(layer))
-!$omp critical(freeeos_family_cache)
-            call ensure_entry(directory,xz,xcoord,zcoord,trim(suffix_for_z(iz(layer))),entry_index,status,source_directory)
-!$omp end critical(freeeos_family_cache)
+            call lookup_entry(directory,xz,xcoord,zcoord,trim(suffix_for_z(iz(layer))),entry_index,status,source_directory)
             ierr=status
             if (ierr /= table_ok) goto 900
             metadata=get_metadata(entries(entry_index)%table)
@@ -210,6 +219,53 @@ contains
       write(error_unit,*) 'freeeos_family stencil nZ iz nX ix',nz,iz,nx,ix
 !$omp end critical(freeeos_family_diagnostic)
    end subroutine record_failure
+
+   subroutine lookup_entry(directory,xz,hydrogen,metals,suffix,index_entry,status,source_directory)
+      character(len=*), intent(in) :: directory, suffix
+      type(DT_XZ_Info), intent(in) :: xz
+      real(dp), intent(in) :: hydrogen,metals
+      integer, intent(out) :: index_entry,status
+      character(len=*), intent(in), optional :: source_directory
+      integer :: position
+      index_entry=0
+      if (warm_count > 0) then
+         status=family_directory_changed
+         if (trim(directory) /= warm_directory) return
+         status=family_grid_mismatch
+         if (.not. same_grid(xz,warm_grid)) return
+         if (warm_supplemental) then
+            status=family_directory_changed
+            if (present(source_directory)) then
+               if (trim(source_directory) /= warm_source_directory) return
+            else
+               if (trim(directory) /= warm_source_directory) return
+            end if
+         end if
+         do position=1,warm_count
+            if (suffix /= warm_suffix(position)) cycle
+            if (hydrogen /= warm_x(position) .or. metals /= warm_z(position)) cycle
+            index_entry=warm_index(position)
+            status=table_ok
+            return
+         end do
+      end if
+!$omp critical(freeeos_family_cache)
+      call ensure_entry(directory,xz,hydrogen,metals,suffix,index_entry,status,source_directory)
+      if (status == table_ok .and. warm_count < max_entries) then
+         if (warm_count == 0) then
+            warm_directory=family_directory
+            warm_grid=saved_grid
+            warm_supplemental=supplemental_family
+            if (supplemental_family) warm_source_directory=family_source_directory
+         end if
+         warm_count=warm_count+1
+         warm_index(warm_count)=index_entry
+         warm_x(warm_count)=hydrogen
+         warm_z(warm_count)=metals
+         warm_suffix(warm_count)=suffix
+      end if
+!$omp end critical(freeeos_family_cache)
+   end subroutine lookup_entry
 
    subroutine ensure_entry(directory,xz,hydrogen,metals,suffix,index_entry,status,source_directory)
       character(len=*), intent(in) :: directory
