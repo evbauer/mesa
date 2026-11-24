@@ -1,3 +1,4 @@
+! Historical raw-source comparison utility; omitted from the production EOS build.
 module freeeos_source
    use const_def, only: dp, ln10
    use freeeos_table, only: table_metadata, read_tokens, table_ok, table_io_error, table_format_error, table_mismatch

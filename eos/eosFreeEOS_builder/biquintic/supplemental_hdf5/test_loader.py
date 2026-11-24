@@ -1,4 +1,4 @@
-"""Authentication, source-grid and assembled-mask failure checks."""
+"""Historical raw-reader authentication/grid tests; not production loader checks."""
 import argparse
 import json
 import os

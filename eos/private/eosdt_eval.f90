@@ -1176,7 +1176,7 @@
             call freeeos_family_results(trim(table_directory), rq% eosDT_use_linear_interp_for_X, &
                rq% tiny_fuzz, FreeEOS_XZ_struct, X, Z, species, chem_id, rho, T, &
                res, d_dlnd, d_dlnT, d_dxa, native_ierr, rq% suffix_for_FreeEOS_Z, &
-               trim(mesa_data_dir)//'/eosFreeEOS_data')
+               trim(mesa_data_dir)//'/eosFreeEOS_data', legacy_request=rq)
             if (native_ierr /= 0) ierr = -7950
             return
          end if

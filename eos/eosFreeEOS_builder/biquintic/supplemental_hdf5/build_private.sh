@@ -4,7 +4,7 @@ script_directory=$(cd "$(dirname "$0")" && pwd)
 workspace=$(cd "$script_directory/../../../../.." && pwd)
 mesa_directory=${1:-"$workspace/mesa"}
 sdk_directory=${2:-"$workspace/mesasdk-x86_64-linux-26.6.1"}
-output=${3:-"$workspace/freeeos_biquintic_progress/experiments/078_hdf5_refactor"}
+output=${3:?Supply a fresh private output directory; frozen experiments must not be overwritten}
 stage=${4:-eos}
 case "$stage" in eos|stellar) ;; *) exit 2 ;; esac
 if [[ "${SLURMD_NODENAME:-}" != "$(hostname -s)" || -z "${SLURM_JOB_ID:-}" ]]; then

@@ -18,7 +18,7 @@ SRCS := public/eos_def.f90 \
         eosFreeEOS_builder/biquintic/arithmetic_control/arithmetic_weights.f90 \
         eosFreeEOS_builder/biquintic/arithmetic_ad_control/freeeos_biquintic.f90 \
         eosFreeEOS_builder/biquintic/table_fortran/freeeos_table.f90 \
-        eosFreeEOS_builder/biquintic/supplemental_hdf5/freeeos_source.f90 \
+        eosFreeEOS_builder/biquintic/supplemental_hdf5/freeeos_legacy_nodes.f90 \
         eosFreeEOS_builder/biquintic/supplemental_hdf5/freeeos_supplement.f90 \
         eosFreeEOS_builder/biquintic/family_runtime/freeeos_family.f90 \
         private/eos_helm_eval.f90 \

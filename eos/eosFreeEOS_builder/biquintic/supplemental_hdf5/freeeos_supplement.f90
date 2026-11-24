@@ -3,37 +3,40 @@ module freeeos_supplement
    use forum_m, only: hdf5io_t, OPEN_FILE_RO
    use freeeos_table, only: table_metadata, biquintic_table, assemble_table, &
       table_ok, table_io_error, table_format_error, table_mismatch
-   use freeeos_source, only: reconstruct_source
+   use freeeos_legacy_nodes, only: reconstruct_legacy_nodes
+   use eos_def, only: EosDT_XZ_Info
    use runtime_sha256, only: file_sha256
    use iso_fortran_env, only: int64
    use ieee_arithmetic, only: ieee_is_finite
    implicit none
    private
-   public :: load_source_supplement, read_supplement
+   public :: load_legacy_supplement, read_supplement
    character(len=64), parameter :: policy_sha='40b513e48b512e44ea2c020cd29c000b60128661260f38c0c0b7365c2ae10a7d'
    real(dp), parameter :: policy_crad=7.565733250280004e-15_dp
 contains
-   subroutine load_source_supplement(source_path, supplement_path, x, z, family_id, source_sha, &
+   subroutine load_legacy_supplement(ep, supplement_path, x, z, family_id, source_sha, &
          supplement_sha, table, status)
-      character(len=*), intent(in) :: source_path, supplement_path, source_sha, supplement_sha
+      type(EosDT_XZ_Info), pointer, intent(in) :: ep
+      character(len=*), intent(in) :: supplement_path, source_sha, supplement_sha
       real(dp), intent(in) :: x,z
       integer, intent(in) :: family_id
       type(biquintic_table), intent(out) :: table
       integer, intent(out) :: status
       type(table_metadata) :: metadata
       real(dp), allocatable :: mixed(:,:,:),nodes(:,:,:,:)
-      logical, allocatable :: valid(:,:),source_valid(:,:)
+      logical, allocatable :: valid(:,:)
       call read_supplement(supplement_path,x,z,family_id,source_sha,supplement_sha,metadata,mixed,valid,status)
       if (status /= table_ok) return
-      call reconstruct_source(source_path,metadata,nodes,source_valid,status)
+      call reconstruct_legacy_nodes(ep,metadata,valid,nodes,status)
       if (status /= table_ok) return
-      status=table_mismatch
-      if (any(valid .neqv. source_valid)) return
-      nodes(2,1,:,:)=mixed(1,:,:)
-      nodes(1,2,:,:)=mixed(2,:,:)
-      nodes(2,2,:,:)=mixed(3,:,:)
-      call assemble_table(metadata,nodes,valid,table,status)
-   end subroutine load_source_supplement
+      ! Preserve the legacy loader's dimensions. A full-source supplement may
+      ! cover more Q nodes than that loader reads; use the common affine grid.
+      metadata%nq=size(nodes,3)
+      nodes(2,1,:,:)=mixed(1,1:metadata%nq,:)
+      nodes(1,2,:,:)=mixed(2,1:metadata%nq,:)
+      nodes(2,2,:,:)=mixed(3,1:metadata%nq,:)
+      call assemble_table(metadata,nodes,valid(1:metadata%nq,:),table,status)
+   end subroutine load_legacy_supplement
 
    subroutine read_supplement(path,x,z,family_id,source_sha,supplement_sha,metadata,mixed,valid,status)
       character(len=*), intent(in) :: path,source_sha,supplement_sha

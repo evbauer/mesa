@@ -1,9 +1,10 @@
 module freeeos_family
    use const_def, only: dp
-   use eos_def, only: DT_XZ_Info, nv, i_lnPgas, i_lnE, i_lnS, i_grad_ad, i_chiRho, i_chiT, &
+   use eos_def, only: DT_XZ_Info, EosDT_XZ_Info, EoS_General_Info, eosdt_max_FreeEOS, nv, i_lnPgas, i_lnE, i_lnS, i_grad_ad, i_chiRho, i_chiT, &
       i_Cp, i_Cv, i_dE_dRho, i_dS_dT, i_dS_dRho, i_gamma1, i_gamma3, i_mu, i_eta
    use chem_def, only: chem_isos
-   use freeeos_supplement, only: load_source_supplement
+   use eosDT_load_tables, only: load_single_eosDT_table_by_id
+   use freeeos_supplement, only: load_legacy_supplement
    use freeeos_table, only: biquintic_table, table_metadata, potential_partials, thermodynamic_state, &
       load_table, get_metadata, evaluate_table_real, derive_state, partial_vector, table_ok, &
       state_pgas, state_energy, state_entropy, state_cv, state_cp, state_chirho, state_chit, &
@@ -70,7 +71,7 @@ contains
 
    subroutine freeeos_family_results_ordinary(directory, linear_x, tiny_fuzz, xz, &
          hydrogen, metals, species, chem_id, rho, temperature, &
-         res, d_dlnd, d_dlnT, d_dxa, ierr, source_directory)
+         res, d_dlnd, d_dlnT, d_dxa, ierr, source_directory, legacy_request)
       character(len=*), intent(in) :: directory
       logical, intent(in) :: linear_x
       real(dp), intent(in) :: tiny_fuzz, hydrogen, metals, rho, temperature
@@ -80,15 +81,16 @@ contains
       real(dp), intent(inout) :: d_dxa(nv,species)
       integer, intent(out) :: ierr
       character(len=*), intent(in), optional :: source_directory
+      type(EoS_General_Info), pointer, optional :: legacy_request
       character(len=1) :: ordinary_suffixes(size(xz%Zs))
       ordinary_suffixes=''
       call freeeos_family_results_configured(directory,linear_x,tiny_fuzz,xz, &
-         hydrogen,metals,species,chem_id,rho,temperature,res,d_dlnd,d_dlnT,d_dxa,ierr,ordinary_suffixes,source_directory)
+         hydrogen,metals,species,chem_id,rho,temperature,res,d_dlnd,d_dlnT,d_dxa,ierr,ordinary_suffixes,source_directory,legacy_request)
    end subroutine freeeos_family_results_ordinary
 
    subroutine freeeos_family_results_configured(directory, linear_x, tiny_fuzz, xz, &
          hydrogen, metals, species, chem_id, rho, temperature, &
-         res, d_dlnd, d_dlnT, d_dxa, ierr, suffix_for_z, source_directory)
+         res, d_dlnd, d_dlnT, d_dxa, ierr, suffix_for_z, source_directory, legacy_request)
       character(len=*), intent(in) :: directory
       logical, intent(in) :: linear_x
       real(dp), intent(in) :: tiny_fuzz, hydrogen, metals, rho, temperature
@@ -99,6 +101,7 @@ contains
       integer, intent(out) :: ierr
       character(len=*), intent(in) :: suffix_for_z(:)
       character(len=*), intent(in), optional :: source_directory
+      type(EoS_General_Info), pointer, optional :: legacy_request
       real(dp) :: weights(4,2), dx_weights(4,2), dz_weights(4,2)
       real(dp) :: z_weights(2), z_derivatives(2)
       real(dp) :: combined(10), by_x(10), by_z(10), components(10)
@@ -133,6 +136,11 @@ contains
          ierr=family_unsupported_suffix
          if (len_trim(suffix_for_z(iz(layer))) /= 0 .and. &
              trim(suffix_for_z(iz(layer))) /= '_CO') goto 900
+         if (present(legacy_request)) then
+            ierr=family_legacy_error
+            if (.not. associated(legacy_request)) goto 900
+            if (trim(legacy_request%suffix_for_FreeEOS_Z(iz(layer))) /= trim(suffix_for_z(iz(layer)))) goto 900
+         end if
       end do
       do layer=1,nz
          call select_x(xz,iz(layer),hydrogen,linear_x,tiny_fuzz, &
@@ -151,7 +159,7 @@ contains
          do point=1,nx(layer)
             xcoord=xz%Xs_for_Z(ix(point,layer),iz(layer))
             zcoord=xz%Zs(iz(layer))
-            call lookup_entry(directory,xz,xcoord,zcoord,trim(suffix_for_z(iz(layer))),entry_index,status,source_directory)
+            call lookup_entry(directory,xz,xcoord,zcoord,trim(suffix_for_z(iz(layer))),entry_index,status,source_directory,legacy_request,ix(point,layer),iz(layer))
             ierr=status
             if (ierr /= table_ok) goto 900
             metadata=get_metadata(entries(entry_index)%table)
@@ -220,20 +228,29 @@ contains
 !$omp end critical(freeeos_family_diagnostic)
    end subroutine record_failure
 
-   subroutine lookup_entry(directory,xz,hydrogen,metals,suffix,index_entry,status,source_directory)
+   subroutine lookup_entry(directory,xz,hydrogen,metals,suffix,index_entry,status,source_directory,legacy_request,ix,iz)
       character(len=*), intent(in) :: directory, suffix
       type(DT_XZ_Info), intent(in) :: xz
       real(dp), intent(in) :: hydrogen,metals
       integer, intent(out) :: index_entry,status
+      integer, intent(in) :: ix, iz
       character(len=*), intent(in), optional :: source_directory
+      type(EoS_General_Info), pointer, optional :: legacy_request
       integer :: position
       index_entry=0
+      ! Required even for warm supplemental reads: no independent source fallback.
+      status=family_legacy_error
+      if (present(legacy_request)) then
+         if (.not. associated(legacy_request)) return
+      end if
       if (warm_count > 0) then
          status=family_directory_changed
          if (trim(directory) /= warm_directory) return
          status=family_grid_mismatch
          if (.not. same_grid(xz,warm_grid)) return
          if (warm_supplemental) then
+            status=family_legacy_error
+            if (.not. present(legacy_request)) return
             status=family_directory_changed
             if (present(source_directory)) then
                if (trim(source_directory) /= warm_source_directory) return
@@ -245,12 +262,16 @@ contains
             if (suffix /= warm_suffix(position)) cycle
             if (hydrogen /= warm_x(position) .or. metals /= warm_z(position)) cycle
             index_entry=warm_index(position)
+            if (warm_supplemental) then
+               status=family_legacy_error
+               if (index(trim(entries(index_entry)%filename),trim(legacy_request%eosDT_file_prefix)//'-FreeEOS_') /= 1) return
+            end if
             status=table_ok
             return
          end do
       end if
 !$omp critical(freeeos_family_cache)
-      call ensure_entry(directory,xz,hydrogen,metals,suffix,index_entry,status,source_directory)
+      call ensure_entry(directory,xz,hydrogen,metals,suffix,index_entry,status,source_directory,legacy_request,ix,iz)
       if (status == table_ok .and. warm_count < max_entries) then
          if (warm_count == 0) then
             warm_directory=family_directory
@@ -267,15 +288,18 @@ contains
 !$omp end critical(freeeos_family_cache)
    end subroutine lookup_entry
 
-   subroutine ensure_entry(directory,xz,hydrogen,metals,suffix,index_entry,status,source_directory)
+   subroutine ensure_entry(directory,xz,hydrogen,metals,suffix,index_entry,status,source_directory,legacy_request,ix,iz)
       character(len=*), intent(in) :: directory
       type(DT_XZ_Info), intent(in) :: xz
       real(dp), intent(in) :: hydrogen, metals
       character(len=*), intent(in) :: suffix
       integer, intent(out) :: index_entry, status
+      integer, intent(in) :: ix, iz
       character(len=*), intent(in), optional :: source_directory
-      character(len=:), allocatable :: selected_source_directory, source_filename
-      integer :: position, family_id, filename_length
+      type(EoS_General_Info), pointer, optional :: legacy_request
+      character(len=:), allocatable :: selected_source_directory
+      type(EosDT_XZ_Info), pointer :: ep
+      integer :: position, family_id, legacy_status
       index_entry=0
       if (.not. allocated(family_directory)) then
          call read_manifest(directory,xz,status)
@@ -287,6 +311,9 @@ contains
          if (.not. same_grid(xz,saved_grid)) return
       end if
       if (supplemental_family) then
+         status=family_legacy_error
+         if (.not. present(legacy_request)) return
+         if (.not. associated(legacy_request)) return
          selected_source_directory=trim(directory)
          if (present(source_directory)) selected_source_directory=trim(source_directory)
          status=family_directory_changed
@@ -309,6 +336,10 @@ contains
       if (index_entry == 0) return
       status=family_unavailable
       if (entries(index_entry)%available /= 1) return
+      if (supplemental_family) then
+         status=family_legacy_error
+         if (index(trim(entries(index_entry)%filename),trim(legacy_request%eosDT_file_prefix)//'-FreeEOS_') /= 1) return
+      end if
       if (entries(index_entry)%loaded) then
          status=table_ok
          return
@@ -319,11 +350,16 @@ contains
       end if
       entries(index_entry)%attempted=.true.
       if (supplemental_family) then
-         filename_length=len_trim(entries(index_entry)%filename)
-         source_filename=entries(index_entry)%filename(:filename_length-6)//'.data'
+         status=family_legacy_error
+         entries(index_entry)%load_status=status
+         legacy_status=0
+         nullify(ep)
+         call load_single_eosDT_table_by_id(legacy_request,eosdt_max_FreeEOS,ep,ix,iz,legacy_status)
+         if (legacy_status /= 0) return
+         if (.not. associated(ep)) return
          family_id=0
          if (suffix == '_CO') family_id=1
-         call load_source_supplement(family_source_directory//'/'//source_filename, &
+         call load_legacy_supplement(ep, &
             trim(directory)//'/'//trim(entries(index_entry)%filename),hydrogen,metals,family_id, &
             entries(index_entry)%source_sha,entries(index_entry)%payload_sha,entries(index_entry)%table,status)
       else

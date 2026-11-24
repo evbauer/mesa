@@ -1,7 +1,8 @@
+! Historical raw-source comparison, not the production legacy-EP adapter.
 program test_tables
    use const_def, only: dp
    use freeeos_table
-   use freeeos_supplement, only: load_source_supplement
+   use historical_source_test, only: load_historical_source_supplement
    implicit none
    character(len=2048) :: source_dir,supplement_dir,reference_dir,filename,source_path,reference_path
    character(len=80) :: magic
@@ -33,7 +34,7 @@ program test_tables
       reference_path=trim(reference_dir)//'/'//filename(:k-3)
       family_id=0
       if (index(trim(filename),'_CO.bq.h5') > 0) family_id=1
-      call load_source_supplement(trim(source_path),trim(supplement_dir)//'/'//trim(filename), &
+      call load_historical_source_supplement(trim(source_path),trim(supplement_dir)//'/'//trim(filename), &
          x,z,family_id,source_sha,supplement_sha,table,status)
       if (status /= table_ok) then
          write(*,*) 'load failure',trim(filename),status

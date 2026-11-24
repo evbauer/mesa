@@ -1,101 +1,99 @@
-# Source-backed FreeEOS HDF5 supplements
+# Legacy-loaded FreeEOS HDF5 supplements
 
-The native biquintic backend reads the selected distributed `.data` file once
-per table load. It reconstructs the six lower Helmholtz constraints from the
-printed nodal Pgas, E, S, Cv, chiRho and chiT. The matching `.bq.h5` contributes
-only three higher mixed derivatives, the accepted-node mask and numerical
-metadata. The interpolation kernel continues to use nine constraints in memory.
-There are no new FreeEOS physics calculations and no legacy interpolated values
-used to reconstruct these six constraints.
+The native biquintic backend obtains nodal Pgas, E, S, Cv, chiRho and chiT from
+slot 1 of the existing FreeEOS table loader's `EosDT_XZ_Info%tbl1`. The same
+loader reads the same distributed source files and legacy `.bin` caches with
+its usual header/version/grid/filename conventions. Slot 1 is nodal physics;
+slots 2:4 are bicubic coefficients and are not used to construct the potential.
+Only the missing three higher mixed derivatives, complete support mask and
+metadata come from the existing `.bq.h5` supplement. The biquintic kernel,
+composition weights, analytic derivatives and radiation split are retained.
 
-For normal use, hydrate the checkout's Git LFS data, run the standard MESA
-`./install`, and set `FreeEOS_use_biquintic_interpolation = .true.` in the EOS
-controls. Installation overlays the supplied supplements beside the original
-FreeEOS tables. No preprocessing command or directory override is required.
-The producer commands below are for explicit regeneration and development.
+The family API accepts a real EOS request as optional `legacy_request` at the
+end of either argument list. Supplemental-family calls require that context,
+including warmed calls; missing context returns `family_legacy_error`.
+`eosdt_eval` supplies the real handle request. Family selection passes its ix/iz
+to `load_single_eosDT_table_by_id`, whose immutable prefix/suffix identities
+keep ordinary and C/O nodal storage independent. Native loading never reparses
+or hashes original source bodies. No new native persistent cache or physics
+source generation is required.
 
-`freeeos_source.f90` parses printed Q blocks, audits their rectangularity and
-uniform Q/T coordinates, and retains the canonical printed axes. Two original
-header anomalies are accepted only for their known filenames and declared values:
-`02z60x` has a redundant Q maximum of 3.69; `04z50x` declares 445 Q points and a
-maximum of 3.23. Both actually contain 527 points ending at 5.69. Original rows
-remain untouched, including the `02z70x` block at zero-based Q index 520 whose
-printed density is low by 1e-4. That block is authenticated and excluded.
-Other printed-density discrepancies are masked by the established source policy.
+`freeeos_legacy_nodes.f90` converts the loader's ln(P/E/S) with `math_lib::exp`
+and reads Cv/chi directly. Production physical node coordinates use the legacy
+header affine log10 T/Q grid. The HDF5/kernel coordinate grid is retained, and
+its agreement with the loaded header and actual axes is audited with the
+existing 1e-10-dex source/header coordinate tolerance. Printed row coordinates
+can differ from their header in the last digits. Independent raw-reader values
+therefore need not be bitwise identical: rounding, exp and radiation cancellation
+can change values and particularly near-flat response derivatives. TASK085
+reports those differences separately from source-cold/binary-warm parity.
 
-The low constraints use the same stable analytic radiation subtraction and
-physical-to-native transformation as `freeeos_potential.source_constraints`.
-Complete support is a centered radius-two cross applied twice, matching the
-mean-route mixed derivative estimator. The loader compares the reconstructed
-mask to the HDF5 mask exactly before assembling a table. Invalid nodes have zero
-placeholders. Accepted nodes must have finite constraints. `assemble_table` in
-`freeeos_table` supplies the narrow API that keeps source and HDF5 I/O separate
-from the evaluator. `get_node_constraints` supports reference validation.
+HDF5 `valid` remains authoritative for source flags, density-coordinate audits
+and stencil support, which are not retained as legacy binary columns. Every
+eligible loaded node must also have finite/positive physical columns and finite
+constraints. Shapes, metadata, policy and supplement digest are checked through
+FORUM. Original source SHA records are compared between manifest and HDF5 as
+provenance; original source files are not rescanned. Missing/mismatched data and
+unsupported cells remain explicit failures. See [FORMAT.md](FORMAT.md).
 
-`freeeos_supplement.f90` uses MESA FORUM's `hdf5io_t`, `OPEN_FILE_RO`, shape
-queries and numerical reads. Python shape `(ntau,nu)` becomes Fortran
-`(nu,ntau)`. Required attributes are scalar int32/float64; SHA digests are
-32-element int32 datasets. Shape and rank checks precede typed reads. Recoverable
-schema, identity, mask and finite-value errors explicitly close the handle.
-FORUM does not expose a general recoverable I/O or datatype-validation API:
-corrupt containers and unsupported type conversions can terminate inside FORUM.
-The producer and external verifier check exact on-disk types and lossless filters.
+For normal use, hydrate Git LFS assets, install MESA normally, and enable
+`FreeEOS_use_biquintic_interpolation`. The supplied 89 supplements (83 ordinary,
+six C/O) overlay the existing FreeEOS data directory. The native directory
+override controls supplements. The real EOS request controls source loading.
+The version-51 headers of `mesa-FreeEOS_02z60x.data` and
+`mesa-FreeEOS_04z50x.data` report incorrect logQ extents. The latter also
+declares 445 Q blocks while its body contains 527. Both bodies extend to
+logQ=5.69; the headers report 3.69 and 3.23, respectively. This refactor
+deliberately leaves those headers and the standard loader's handling unchanged.
+The adapter follows `Locate_logQ`: the loaded count, origin and spacing
+define the uniform grid, rather than the erroneous reported maximum. A
+shorter loaded table uses the aligned prefix of the authenticated supplement;
+the 04z50x native table therefore has 445 Q nodes, while 02z60x retains 527.
+Neither table is rejected as a whole for these header defects. Origin,
+spacing, temperature-grid, interior-axis and physical-column checks remain.
+No corrected source files, repaired-header binary caches, silent cropping or
+fallback are distributed by this change.
 
-The runtime hashes the selected source file and supplement with the existing
-native Fortran SHA-256 module **at load time**. It compares the supplement digest
-to `supplements.manifest`, the numeric source digest to the manifest, the source
-file digest to that metadata, and the preprocessing digest to the declared
-implementation policy. It also checks composition, family, grid and radiation
-metadata. There are no external hash commands and no hash work per EOS query.
-Hashes are integrity checks against the distributed manifest, not a signature
-or a guarantee about a file modified after loading. Tables are cached immutably
-by composition and suffix; a different source/supplement directory is an explicit
-error in the same process. The legacy X/Z-only cache is not used for reconstruction.
+## Private validation
 
-The default native directory is `mesa_data_dir/eosFreeEOS_data/`. The existing
-`FreeEOS_biquintic_table_dir` override remains supported. Sources always come
-from the MESA data directory at the native call site; standalone family calls
-may optionally supply `source_directory`, defaulting to their payload directory.
-Existing argument lists remain valid. Explicit old `family.manifest` V1
-directories remain comparison inputs. A new `supplements.manifest` has distinct
-magic `FREEEOS_BIQUINTIC_SUPPLEMENTS_V1`; a present malformed supplement manifest
-cannot select the V1 reader. Missing or mismatched native data produce explicit
-errors without ordinary/C/O substitution. Toggle-off routing and mapped
-abundance partials retain their prior implementation.
+Run computational commands on the inherited allocated node. Supply a writable
+fresh output path; do not overwrite frozen evidence or installed libraries.
+`build_private.sh MESA SDK OUTPUT` builds EOS against that tree's already
+installed compatible dependencies. `build_tests.sh MESA SDK OUTPUT` uses its
+private `OUTPUT/native_build` package tree. TASK085's isolated build script
+instead uses the coherent TASK081 SDK26.6.1 dependencies and current EOS sources.
 
-Run generation using a Python environment with numpy and h5py, on an allocated
-compute node. Arguments are portable and no report repository is required:
+With a private EOS build, from this directory:
 
 ```sh
-python3 produce.py --source-dir /path/to/mesa/data/eosFreeEOS_data \
-  --output /path/to/staging/eosFreeEOS_data --workers 8
-python3 verify.py --source-dir /path/to/mesa/data/eosFreeEOS_data \
-  --supplement-dir /path/to/staging/eosFreeEOS_data
-python3 package.py --source-dir /path/to/mesa/data/eosFreeEOS_data \
-  --supplement-dir /path/to/staging/eosFreeEOS_data \
-  --output /path/to/mesa/eos/eosFreeEOS_biquintic_data.tar.xz \
-  --audit-output /path/to/archive_audit.json \
-  --extraction-dir /path/to/new_extraction_directory --threads 8
+bash build_tests.sh /path/to/mesa /path/to/sdk /path/to/private-output
+export MESA_CACHES_DIR=/path/to/private-cache
+export MESA_TEMP_CACHES_DIR=/path/to/private-temp-cache
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+/path/to/private-output/tests/test_legacy_tables /path/to/mesa /path/to/eos-inlist \
+  /path/to/mesa/eos/eosFreeEOS_builder/mass_frac_solar.txt /path/to/supplements
+/path/to/private-output/tests/test_legacy_family /path/to/mesa /path/to/eos-inlist \
+  /path/to/mesa/eos/eosFreeEOS_builder/mass_frac_solar.txt /path/to/supplements
 ```
 
-An optional `produce.py --reference-dir /path/to/V1/family` checks source-generated
-constraints and masks against SHA-authenticated archived V1 payloads exactly.
-This oracle is unnecessary for collaborator regeneration. Generation writes
-float64 mixed arrays with lossless gzip/shuffle/Fletcher32, int8 validity, and
-small provenance records. All 89 sources, including six C/O variants, must be
-present; `--limit` creates developer fixtures only. Packaging verifies coverage,
-uses deterministic tar member ordering and numeric headers, and includes only
-89 HDF5 files, 89 small audits and two family metadata files. It never includes
-original `.data`, caches, objects, logs or extraction markers. A staged overlay
-retains source-file links and revalidates every source and supplement identity.
+`test_legacy_tables` attempts all 89 delivered tables through the actual standard
+loader and requires matching shapes, finite nodes, zero invalid placeholders,
+support and shutdown. The earlier all-89-table
+pass and eleven-case paired stellar campaign included a temporary loader
+repair; those results do not validate this version without that repair.
+`test_legacy_family` uses real handles for 16-thread
+simultaneous ordinary/C/O first use, 320 exact warmed-return comparisons,
+linear/cubic composition stencils and context/support failures. Budget those
+threads within the one allocation.
 
-For private validation, `build_private.sh MESA SDK OUTPUT` builds EOS without
-installing libraries; `build_tests.sh MESA SDK OUTPUT` compiles the FORUM fixture,
-all-table comparator and native drivers. `test_reader.py` covers an asymmetric
-7x5 fixture and recoverable malformed/mismatched cases. `test_tables` compares
-all assembled masks and mixed arrays exactly, and reports finite-precision
-differences in reconstructed constraints, potential partials, states and state
-partials. Runtime reconstruction involves independent Fortran exponentiation
-and cancellation in radiation-dominated regimes; exact source-generation/V1
-agreement does not imply bitwise runtime reconstruction. Report those differences
-separately, without relaxing reference bounds or changing the numerical policy.
+`test_reader.py --driver OUTPUT/tests/test_reader --output FRESH --sdk SDK`
+checks an asymmetric FORUM fixture and malformed metadata. Historical
+`test_loader`, `test_loader.py` and `test_tables` deliberately link only the
+explicit `historical_source_test.f90` + `freeeos_source.f90` comparison utility.
+They exercise the archived independent source-reader/V1 contract, including
+source hashing; they are not production loader tests. Those modules are omitted
+from `eos/Makefile` and never restore a raw-source fallback. The historical
+all-table comparator takes source directory, supplement directory and V1
+reference directory; its comparison numbers are not an oracle for bitwise
+legacy-nodal arithmetic. The producer/verify/package Python utilities remain
+explicit development tools. No producer or archive repack was run for TASK085.

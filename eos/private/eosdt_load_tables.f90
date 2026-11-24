@@ -91,10 +91,20 @@
          type (EosDT_XZ_Info), pointer :: ep
          integer,intent(in) :: iz, ix
          integer, intent(out) :: ierr
+         type(FreeEOS_Alternate_Table), pointer :: alternate
+         logical :: primary_loaded
 
+      ierr = 0
       if (which_eosdt == eosdt_max_FreeEOS) then
          ep => FreeEOS_XZ_data(ix,iz)
-         if (FreeEOS_XZ_loaded(ix,iz)) return
+         ! Acquire the publication flag before reading immutable identity/data.
+         ! The warm path retains the existing lock-free primary lookup.
+!$OMP ATOMIC READ ACQUIRE
+         primary_loaded = FreeEOS_XZ_loaded(ix,iz)
+         if (primary_loaded) then
+            if (FreeEOS_XZ_suffix(ix,iz) == rq%suffix_for_FreeEOS_Z(iz) .and. &
+                FreeEOS_XZ_prefix(ix,iz) == rq%eosDT_file_prefix) return
+         end if
       else if (which_eosdt == eosdt_OPAL_SCVH) then
          ep => eosDT_XZ_data(ix,iz)
          if (eosDT_XZ_loaded(ix,iz)) return
@@ -105,7 +115,42 @@
 
 !$OMP CRITICAL(eosDT_load)
       if (which_eosdt == eosdt_max_FreeEOS) then
-         if (.not. FreeEOS_XZ_loaded(ix,iz)) call do_read
+         if (.not. FreeEOS_XZ_loaded(ix,iz)) then
+            call do_read
+         else if (FreeEOS_XZ_suffix(ix,iz) /= rq%suffix_for_FreeEOS_Z(iz) .or. &
+                  FreeEOS_XZ_prefix(ix,iz) /= rq%eosDT_file_prefix) then
+            alternate => FreeEOS_alternate_tables
+            do while (associated(alternate))
+               if (alternate%ix == ix .and. alternate%iz == iz .and. &
+                   alternate%suffix == rq%suffix_for_FreeEOS_Z(iz) .and. &
+                   alternate%prefix == rq%eosDT_file_prefix) exit
+               alternate => alternate%next
+            end do
+            if (associated(alternate)) then
+               ep => alternate%data
+            else
+               allocate(alternate, stat=ierr)
+               if (ierr == 0) then
+                  alternate%ix = ix
+                  alternate%iz = iz
+                  alternate%suffix = rq%suffix_for_FreeEOS_Z(iz)
+                  alternate%prefix = rq%eosDT_file_prefix
+                  nullify(alternate%data%tbl1, alternate%data%logQs, alternate%data%logTs)
+                  ep => alternate%data
+                  call read_one(ix,iz,ierr)
+                  if (ierr == 0) then
+                     alternate%next => FreeEOS_alternate_tables
+                     FreeEOS_alternate_tables => alternate
+                  else
+                     if (associated(alternate%data%tbl1)) deallocate(alternate%data%tbl1)
+                     if (associated(alternate%data%logQs)) deallocate(alternate%data%logQs)
+                     if (associated(alternate%data%logTs)) deallocate(alternate%data%logTs)
+                     deallocate(alternate)
+                     nullify(ep)
+                  end if
+               end if
+            end if
+         end if
       else
          if (.not. eosDT_XZ_loaded(ix,iz)) call do_read
       end if
@@ -117,6 +162,9 @@
             call read_one(ix,iz,ierr)
             if (ierr /= 0) return
             if (which_eosdt == eosdt_max_FreeEOS) then
+               FreeEOS_XZ_suffix(ix,iz) = rq%suffix_for_FreeEOS_Z(iz)
+               FreeEOS_XZ_prefix(ix,iz) = rq%eosDT_file_prefix
+!$OMP ATOMIC WRITE RELEASE
                FreeEOS_XZ_loaded(ix,iz) = .true.
             else
                eosDT_XZ_loaded(ix,iz) = .true.

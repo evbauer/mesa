@@ -1,7 +1,8 @@
 # FreeEOS supplemental HDF5 tables
 
-Implemented format version 1, 23 November 2026 (TASK078). The default native
-runtime reads distributed source tables plus these supplements. Explicit
+Implemented format version 1 (TASK078), with the TASK085 legacy-loader adapter.
+The default native runtime obtains nodal physics through the existing FreeEOS
+loader and its unchanged legacy binary cache, plus these supplements. Explicit
 `FREEEOS_BIQUINTIC_V1` text directories remain comparison inputs.
 
 ## Purpose and file identity
@@ -20,8 +21,10 @@ mesa-FreeEOS_80z00x_CO.data    -> mesa-FreeEOS_80z00x_CO.bq.h5
 Ordinary and C/O files remain distinct even at identical X/Z. Selection follows
 the EOS handle's configured suffix at each participating Z layer. The default
 payload directory is `mesa_data_dir/eosFreeEOS_data`; the existing native
-directory override remains supported. The native call site supplies that
-original source directory independently of the supplement-directory override.
+directory override remains supported. The native call site supplies its real EOS request to the family API. That
+request and the selected composition indices go to the existing
+`load_single_eosDT_table_by_id` routine. The source-directory argument is retained
+for API/context compatibility; it does not authorize an independent source reader.
 
 ## Numerical datasets
 
@@ -94,11 +97,14 @@ X Z available supplement_filename source_sha256 supplement_sha256
 The delivered family contains 89 available entries: 83 ordinary and six C/O.
 An entry's suffix is part of its identity. An unavailable or missing selected
 variant returns an error and cannot select its ordinary counterpart.
-Runtime source and supplement digests are calculated by the native Fortran
-SHA-256 module once at table load. They are compared against the manifest and
-numeric metadata; this is separate from producer and archive verification.
-The digest records provide distributed-file integrity, not cryptographic signing
-or detection of changes after an immutable cached table has been loaded.
+Runtime supplement digests are calculated by the existing Fortran SHA-256
+module once at table load and compared against the manifest. Original-source
+digests remain distributed provenance records and are compared between manifest
+and HDF5 metadata; the production native path does not rescan source files.
+Original-source loading and cache acceptance follow the existing legacy header,
+version, grid, filename and request conventions. No native disk cache is added.
+Digest records do not provide cryptographic signing or detect changes after an
+immutable cached table has been loaded.
 
 ## Reader and source reconstruction
 
@@ -106,15 +112,46 @@ Read through `forum_m`, using `hdf5io_t(filename, OPEN_FILE_RO)` and its
 attribute/dataset accessors. Check required names and shapes before typed
 reads; FORUM rank/shape assertions can terminate the process. Bound dimensions
 before allocating. Validate grid, composition/family, numerical policy and
-source identity before accepting the data. Close the HDF5 handle on completed
+distributed source provenance before accepting the data. Close the HDF5 handle on completed
 reads and on recoverable validation errors.
 
-At table-load time, reconstruct the six lower constraints from the selected
-source's nodal values, apply the same radiation subtraction and coordinate
-transform, and insert the three read datasets. Retain nine constraints in
-memory for the existing interpolation evaluator. Do not reconstruct from
-legacy interpolated query outputs or assume a global X/Z-only source cache
-has the correct configured suffix.
+At table-load time, `freeeos_family` passes the real `EoS_General_Info` request
+and selected ix/iz to `load_single_eosDT_table_by_id`. The returned
+`EosDT_XZ_Info%tbl1` has shape `(sz_per_eos_point,nv,nQ,nT)`: slot 1 contains
+untouched nodal physics and slots 2:4 contain legacy bicubic coefficients.
+`freeeos_legacy_nodes` reads only slot 1. Use `math_lib::exp` on the loader's
+ln(Pgas), ln(E) and ln(S), which were formed by multiplying its parsed log10
+values by ln10. Cv, chiRho and chiT are direct nodal columns. Apply the declared
+radiation split and coordinate transform, then insert the three read datasets.
+Retain nine constraints in memory for the existing biquintic evaluator.
+
+The loader's decimal conversion/ln transform and exp convention need not
+produce bitwise equality with the historical independent raw reader. Quantify
+such differences rather than assert old-reader parity. Source-cold and
+binary-cache-warm uses of the same legacy loader must agree.
+
+Require version 51, matching Q origin/spacing and temperature grid, aligned
+interior Q axes, and finite/positive physical columns at HDF5-eligible nodes.
+The runtime Q count is the smaller of the loaded and supplemental counts;
+all lower and higher constraints and masks use that same leading region.
+The legacy locator defines Q from count/origin/spacing, so the adapter does
+not treat a wrong reported Q maximum as a whole-table mismatch.
+The distributed `valid` mask remains authoritative for original source flags,
+the density-coordinate audit and derivative-stencil support: these flags are
+not columns of the legacy binary cache. Do not infer their absence from finite
+cached values, widen support or silently crop a mismatched supplement.
+
+A supplemental family call without a real request returns `family_legacy_error`,
+including warm calls. Request suffix/prefix identity must match the selected
+family. The standard legacy loader must resolve ordinary/C/O identities
+correctly; an X/Z-only global cache is insufficient. The two known malformed
+version-51 source headers (`02z60x` and `04z50x`) are documented, with no repair
+in this refactor. A shorter legacy grid uses the supplement's aligned prefix,
+without extending the loaded table or changing its reported Q maximum. The standard
+loader and binary-cache header conventions remain in force; no corrected cache
+is supplied as a workaround. No production independent ASCII
+parser or original-source SHA scan remains. `freeeos_source.f90` is retained as
+an off-production historical comparison utility and is omitted from eos/Makefile.
 
 Malformed HDF5 types or a damaged container can still trigger FORUM's own
 fatal error policy; preflight checks do not promise general recoverable I/O.

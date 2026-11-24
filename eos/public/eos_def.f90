@@ -401,6 +401,17 @@
          integer :: version
       end type EosDT_XZ_Info
 
+      ! Alternate FreeEOS filename identities retain independent, immutable
+      ! tables.  They use the same reader and binary caches as the primary table.
+      type FreeEOS_Alternate_Table
+         integer :: ix, iz
+         character(len=30) :: suffix
+         character(len=128) :: prefix
+         type(EosDT_XZ_Info) :: data
+         type(FreeEOS_Alternate_Table), pointer :: next => null()
+      end type FreeEOS_Alternate_Table
+      type(FreeEOS_Alternate_Table), pointer :: FreeEOS_alternate_tables => null()
+
 
       ! data table variables
       type (EosDT_XZ_Info), dimension(num_eosDT_Xs, num_eosDT_Zs), target :: &
@@ -411,6 +422,8 @@
       logical, dimension(num_eosDT_Xs, num_eosDT_Zs) :: &
          eosDT_XZ_loaded, eosSCVH_XZ_loaded, eosCMS_XZ_loaded
       logical, dimension(num_FreeEOS_Xs, num_FreeEOS_Zs) :: FreeEOS_XZ_loaded
+      character(len=30) :: FreeEOS_XZ_suffix(num_FreeEOS_Xs, num_FreeEOS_Zs)
+      character(len=128) :: FreeEOS_XZ_prefix(num_FreeEOS_Xs, num_FreeEOS_Zs)
 
 
       ! interpolation info for eosPC support tables FITION9
@@ -506,6 +519,8 @@
          eosDT_XZ_loaded(:,:) = .false.
          eosSCVH_XZ_loaded(:,:)=.false.
          FreeEOS_XZ_loaded(:,:)=.false.
+         FreeEOS_XZ_suffix(:,:) = ''
+         FreeEOS_XZ_prefix(:,:) = ''
          eosCMS_XZ_loaded(:,:)=.false.
 
          eosDT_result_names(i_lnPgas) = 'lnPgas'
@@ -612,6 +627,7 @@
          use eos_wdm_av_load, only: eos_wdm_av_free_tables
          type (eosPC_Support_Info), pointer :: fq
          type (FITION_Info), pointer :: fi
+         type(FreeEOS_Alternate_Table), pointer :: alternate, next_alternate
          integer :: iz
 
          ! WDM_AV per-isotope table store
@@ -626,6 +642,18 @@
             eosCMS_XZ_data, eosCMS_XZ_loaded, num_eosDT_Xs, num_eosDT_Zs)
          call free_EosDT_XZ_Info( &
             FreeEOS_XZ_data, FreeEOS_XZ_loaded, num_FreeEOS_Xs, num_FreeEOS_Zs)
+         alternate => FreeEOS_alternate_tables
+         do while (associated(alternate))
+            next_alternate => alternate%next
+            if (associated(alternate%data%tbl1)) deallocate(alternate%data%tbl1)
+            if (associated(alternate%data%logQs)) deallocate(alternate%data%logQs)
+            if (associated(alternate%data%logTs)) deallocate(alternate%data%logTs)
+            deallocate(alternate)
+            alternate => next_alternate
+         end do
+         nullify(FreeEOS_alternate_tables)
+         FreeEOS_XZ_suffix(:,:) = ''
+         FreeEOS_XZ_prefix(:,:) = ''
 
          ! Misc. stuff
 

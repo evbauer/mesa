@@ -1,7 +1,8 @@
+! Historical raw-source comparison, not the production legacy-EP adapter.
 program test_loader
    use const_def, only: dp
    use freeeos_table, only: biquintic_table
-   use freeeos_supplement, only: load_source_supplement
+   use historical_source_test, only: load_historical_source_supplement
    implicit none
    type(biquintic_table) :: table
    character(len=2048) :: source_path,supplement_path,argument
@@ -16,7 +17,7 @@ program test_loader
    call get_command_argument(6,source_sha)
    call get_command_argument(7,supplement_sha)
    call get_command_argument(8,argument); read(argument,*) expected_status
-   call load_source_supplement(trim(source_path),trim(supplement_path),hydrogen,metals,family_id, &
+   call load_historical_source_supplement(trim(source_path),trim(supplement_path),hydrogen,metals,family_id, &
       source_sha,supplement_sha,table,status)
    if (status /= expected_status) then
       write(*,*) 'expected/status',expected_status,status
