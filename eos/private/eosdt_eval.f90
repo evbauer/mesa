@@ -78,7 +78,7 @@
          integer, intent(out) :: ierr
 
          ierr = 0
-         if (rq% FreeEOS_use_biquintic_interpolation .and. rq% use_other_FreeEOS_results) then
+         if (rq% FreeEOS_use_HELM_interpolation .and. rq% use_other_FreeEOS_results) then
             ierr = -7903
             return
          end if
@@ -1161,13 +1161,13 @@
          res(i_frac_FreeEOS) = 1.0d0
 
          if (ierr /= 0 .or. skip) then
-            if (rq% FreeEOS_use_biquintic_interpolation) then
+            if (rq% FreeEOS_use_HELM_interpolation) then
                ierr = -7950
                skip = .false.
             end if
             return
          end if
-         if (rq% FreeEOS_use_biquintic_interpolation) then
+         if (rq% FreeEOS_use_HELM_interpolation) then
             call check_other_FreeEOS_configuration(rq, ierr)
             if (ierr /= 0) return
             table_directory = rq% FreeEOS_biquintic_table_dir
@@ -2262,7 +2262,7 @@
          end if
 
          legacy_hi=nv
-         if (which_eosdt == eosdt_max_FreeEOS .and. rq% FreeEOS_use_biquintic_interpolation) then
+         if (which_eosdt == eosdt_max_FreeEOS .and. rq% FreeEOS_use_HELM_interpolation) then
             ! Native thermodynamics replace the other columns. Retain columns
             ! 1:eta, including pressure/entropy values and partials used by all
             ! legacy error checks, as well as mu/free-electron/eta auxiliaries.

@@ -1,0 +1,1 @@
+../../eosFreeEOS_builder/biquintic/freeeos_potential.py

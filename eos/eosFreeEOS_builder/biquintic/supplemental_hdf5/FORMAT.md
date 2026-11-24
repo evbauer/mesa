@@ -1,5 +1,10 @@
 # FreeEOS supplemental HDF5 tables
 
+Production Fortran sources live in `eos/private/`; tests and historical
+comparison drivers live in `eos/test/biquintic/`. This directory contains
+preprocessing tools and the data specification. The enabling EOS control is
+`FreeEOS_use_HELM_interpolation`, default `.false.`.
+
 Implemented format version 1 (TASK078), with the TASK085 legacy-loader adapter.
 The default native runtime obtains nodal physics through the existing FreeEOS
 loader and its unchanged legacy binary cache, plus these supplements. Explicit
@@ -151,7 +156,8 @@ without extending the loaded table or changing its reported Q maximum. The stand
 loader and binary-cache header conventions remain in force; no corrected cache
 is supplied as a workaround. No production independent ASCII
 parser or original-source SHA scan remains. `freeeos_source.f90` is retained as
-an off-production historical comparison utility and is omitted from eos/Makefile.
+a historical comparison utility under `eos/test/biquintic/supplemental_hdf5/`
+and is omitted from eos/Makefile.
 
 Malformed HDF5 types or a damaged container can still trigger FORUM's own
 fatal error policy; preflight checks do not promise general recoverable I/O.

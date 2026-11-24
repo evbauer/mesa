@@ -14,13 +14,13 @@ SRCS := public/eos_def.f90 \
         private/eosdt_eval.f90 \
         private/eosdt_load_tables.f90 \
         private/eosdt_support.f90 \
-        eosFreeEOS_builder/biquintic/runtime_adapter/runtime_sha256.f90 \
-        eosFreeEOS_builder/biquintic/arithmetic_control/arithmetic_weights.f90 \
-        eosFreeEOS_builder/biquintic/arithmetic_ad_control/freeeos_biquintic.f90 \
-        eosFreeEOS_builder/biquintic/table_fortran/freeeos_table.f90 \
-        eosFreeEOS_builder/biquintic/supplemental_hdf5/freeeos_legacy_nodes.f90 \
-        eosFreeEOS_builder/biquintic/supplemental_hdf5/freeeos_supplement.f90 \
-        eosFreeEOS_builder/biquintic/family_runtime/freeeos_family.f90 \
+        private/runtime_sha256.f90 \
+        private/arithmetic_weights.f90 \
+        private/freeeos_biquintic.f90 \
+        private/freeeos_table.f90 \
+        private/freeeos_legacy_nodes.f90 \
+        private/freeeos_supplement.f90 \
+        private/freeeos_family.f90 \
         private/eos_helm_eval.f90 \
         private/eos_initialize.f90 \
         private/eos_wdm_av_def.f90 \
